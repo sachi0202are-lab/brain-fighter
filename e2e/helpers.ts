@@ -24,9 +24,64 @@ export interface BfSave {
   rounds: { id: string; gameId: string; kind?: string; trials: number; correct: number; power: number }[];
   trials?: { roundId: string; plan?: Record<string, number>; stimMs?: number }[];
   sessions?: { done: string[]; order: string[] }[];
+  games: Record<string, { state: Record<string, number>; belt: number; lastCertAt?: string; trainingDays: string[] }>;
+  certs: { id: string; gameId: string; at: string; tier: number; rounds: { trials: number; correct: number }[]; passed: boolean }[];
+  settings: { fx: string; sound: boolean; colorSafe: boolean };
+  onboardedAt?: string;
+}
+
+/** 端末のローカル日付 'YYYY-MM-DD'（今日から days 日前） */
+export function localDay(daysAgo = 0): string {
+  const d = new Date(Date.now() - daysAgo * 86_400_000);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+type GameSeed = { belt?: number; days?: number; lastCertDaysAgo?: number; state?: Record<string, number> };
+
+/** テスト用の保存データ（第8節の形）。days = 訓練日数（今日より前の日付で作る） */
+export function saveData(games: Partial<Record<'double-hit' | 'combo-recall' | 'stance-change', GameSeed>> = {}, extra: Record<string, unknown> = {}): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const id of ['double-hit', 'combo-recall', 'stance-change'] as const) {
+    const g = games[id] ?? {};
+    out[id] = {
+      state: g.state ?? {},
+      belt: g.belt ?? 0,
+      trainingDays: Array.from({ length: g.days ?? 0 }, (_, k) => localDay(k + 1)).sort(),
+      ...(g.lastCertDaysAgo !== undefined ? { lastCertAt: new Date(Date.now() - g.lastCertDaysAgo * 86_400_000).toISOString() } : {}),
+    };
+  }
+  return {
+    version: 1,
+    createdAt: new Date(Date.now() - 30 * 86_400_000).toISOString(),
+    settings: { fx: 'light', sound: false, colorSafe: false },
+    games: out,
+    rounds: [],
+    certs: [],
+    trials: [],
+    sessions: [],
+    onboardedAt: new Date(Date.now() - 30 * 86_400_000).toISOString(),
+    ...extra,
+  };
+}
+
+/** 保存データを localStorage に入れて読み込み直す（アプリは起動時に読むので reload する） */
+export async function seedSave(page: Page, data: Record<string, unknown>, url = './?test=1#/'): Promise<void> {
+  await page.goto(url);
+  await page.evaluate((json) => localStorage.setItem('brain-fighter.v1', json), JSON.stringify(data));
+  await page.reload();
+}
+export interface FxAuditReport {
+  stimulusPhases: number;
+  violations: string[];
+  feedbackShown: number;
+  maxFeedbackPerSecond: number;
 }
 interface BfTest {
-  autoplay(opts?: { delayMs?: number }): void;
+  autoplay(opts?: { delayMs?: number; correct?: (i: number) => boolean }): void;
+  stopAutoplay(): void;
+  state(): { route: string; running: boolean; snapshot: { i: number; trials: number; phase: string } | null };
+  startFxAudit(): void;
+  fxAuditReport(): FxAuditReport;
   logs(): BfTestLogRound[];
   save(): BfSave;
   frameMs(): number;

@@ -1,6 +1,7 @@
 /**
  * 短い正誤音（WebAudio の発振器。外部の音素材は使わない）。
- * 最初のタップ（pointerdown）で unlock() するまで音は出ない（埋め込み時の自動再生制限にも合う）。
+ * 最初のタップ（pointerdown）・キー操作で unlock() するまで音は出ない（AudioContext も作らない）。
+ * 埋め込み（iframe）時の自動再生制限にも合う。
  */
 type AudioCtor = typeof AudioContext;
 
@@ -19,6 +20,33 @@ export class SoundPlayer {
       if (this.ctx.state === 'suspended') void this.ctx.resume();
     } catch {
       this.ctx = null;
+    }
+  }
+
+  /** 音を出せる状態か（最初のユーザー操作のあと） */
+  get ready(): boolean {
+    return this.ctx !== null && this.ctx.state === 'running';
+  }
+
+  /** 必殺演出の衝撃音（Full・ラウンド間だけ）。低く短い音（約 0.15 秒・小さめ） */
+  impact(): void {
+    const ctx = this.ctx;
+    if (!ctx || ctx.state !== 'running') return;
+    try {
+      const t = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(150, t);
+      osc.frequency.exponentialRampToValueAtTime(55, t + 0.14);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.08, t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.16);
+    } catch {
+      /* 音が出せなくても進行には関係ない */
     }
   }
 

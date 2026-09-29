@@ -1,11 +1,13 @@
 /** ホーム: 総合戦闘力・3ゲームの戦闘力とベルト・今日のセッション・今週 x / 5 日・昇段審査 */
-import { allTrainingDays, certAvailability, sessionAvailability, WEEK_GOAL_DAYS, weekTrainingDays } from '../../engine/session';
+import { availableCertGames } from '../../cert/cert';
+import { allTrainingDays, sessionAvailability, WEEK_GOAL_DAYS, weekTrainingDays } from '../../engine/session';
 import { beltName, gameText, ja } from '../../i18n/ja';
 import { BELT_COLORS, GAME_COLORS } from '../../skin/palette';
 import { GAME_IDS } from '../../storage/schema';
 import { latestPower, totalBelt, totalPowerNow, trainingRounds } from '../../storage/selectors';
 import type { App } from '../app';
 import { h } from '../dom';
+import { fullAppUrl } from '../embed-code';
 import { fmtInt, fmtTime } from '../format';
 import { startOrResumeSession } from '../session-flow';
 
@@ -18,7 +20,20 @@ export function beltChip(belt: number): HTMLElement {
   );
 }
 
-export function topBar(title: string, back: boolean): HTMLElement {
+/** 「全画面で開く」（埋め込みページから本体を新しいタブで開く） */
+export function fullscreenLink(): HTMLElement {
+  return h(
+    'a',
+    { class: 'btn small fullscreen-link', href: fullAppUrl(), target: '_blank', rel: 'noopener', 'data-testid': 'fullscreen' },
+    ja.nav.fullscreen,
+  );
+}
+
+/**
+ * 画面上部のバー。ホームでは記録・設定へのナビ、ほかの画面では「もどる」。
+ * 埋め込み（embed）のホームではナビを省き、「全画面で開く」だけを置く。
+ */
+export function topBar(title: string, back: boolean, embed = false): HTMLElement {
   return h(
     'header',
     { class: 'topbar' },
@@ -26,12 +41,14 @@ export function topBar(title: string, back: boolean): HTMLElement {
     back ? h('h1', { class: 'topbar-title' }, title) : null,
     back
       ? h('span', { class: 'topbar-spacer' })
-      : h(
-          'nav',
-          { class: 'topnav' },
-          h('a', { class: 'btn ghost small', href: '#/records' }, ja.nav.records),
-          h('a', { class: 'btn ghost small', href: '#/settings' }, ja.nav.settings),
-        ),
+      : embed
+        ? fullscreenLink()
+        : h(
+            'nav',
+            { class: 'topnav' },
+            h('a', { class: 'btn ghost small', href: '#/records' }, ja.nav.records),
+            h('a', { class: 'btn ghost small', href: '#/settings' }, ja.nav.settings),
+          ),
   );
 }
 
@@ -73,15 +90,17 @@ export function mountHome(app: App, root: HTMLElement): () => void {
     h('p', { class: 'week', 'data-testid': 'week-days' }, ja.home.weekDays(week, WEEK_GOAL_DAYS)),
   );
 
-  const certReady = GAME_IDS.some((g) => certAvailability(d.games[g], now).available);
-  const cert = certReady
-    ? h(
-        'section',
-        { class: 'card cert-ready' },
-        h('p', null, ja.home.certReady),
-        h('a', { class: 'btn block', href: '#/cert', 'data-testid': 'cert-button' }, ja.home.certButton),
-      )
-    : null;
+  // 昇段審査（訓練 3 日以上・前回から 7 日以上のゲームがあるときだけ）
+  const certGames = availableCertGames(d, now);
+  const cert =
+    certGames.length > 0
+      ? h(
+          'section',
+          { class: 'card cert-ready', 'data-testid': 'cert-ready' },
+          h('p', null, ja.home.certReadyGames(certGames.map((g) => gameText(g).name).join('、'))),
+          h('a', { class: 'btn block', href: '#/cert', 'data-testid': 'cert-button' }, ja.home.certButton),
+        )
+      : null;
 
   const cards = h(
     'section',
@@ -102,6 +121,7 @@ export function mountHome(app: App, root: HTMLElement): () => void {
       );
     }),
   );
-  root.append(h('main', { class: 'screen home' }, topBar(ja.appName, false), hero, session, cert, cards));
+  const embedNote = app.embed ? h('p', { class: 'embed-note', 'data-testid': 'embed-note' }, ja.embed.note) : null;
+  root.append(h('main', { class: 'screen home' }, topBar(ja.appName, false, app.embed), embedNote, hero, session, cert, cards));
   return () => {};
 }

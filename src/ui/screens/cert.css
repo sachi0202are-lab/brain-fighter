@@ -1,0 +1,98 @@
+/* 認定戦（昇段審査）: 選ぶ画面・実施中・合否。演出は最小（点滅・動きなし） */
+.cert-item {
+  grid-template-columns: 1fr auto;
+}
+
+.cert-item .cert-state {
+  grid-column: 1 / -1;
+}
+
+.cert-item .btn {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+}
+
+.cert-tier {
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.cert-verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: center;
+}
+
+.cert-verdict-head {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cert-verdict-word {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.cert-verdict.is-passed .cert-verdict-word {
+  color: var(--ok);
+}
+
+.cert-verdict.is-failed .cert-verdict-word {
+  color: var(--text-2);
+}
+
+.cert-accs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+
+.cert-belt {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.cert-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cert-history li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 4px 10px;
+  align-items: baseline;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
+}
+
+.cert-history li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.cert-history .cert-history-accs {
+  grid-column: 2 / -1;
+  color: var(--muted);
+}
+
+.cert-history .is-passed {
+  color: var(--ok);
+  font-weight: 700;
+}

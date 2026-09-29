@@ -26,6 +26,8 @@ export interface HudRoundInfo {
   enemyName: string;
   /** ウォームアップ中（HP なし） */
   warmup: boolean;
+  /** 敵レベルの代わりに出す一言（認定戦の「黄帯の審査」など） */
+  sub?: string;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text = ''): HTMLElementTagNameMap[K] {
@@ -76,7 +78,7 @@ export class Hud {
 
   setInfo(info: HudRoundInfo): void {
     this.roundEl.textContent = info.label;
-    this.levelEl.textContent = info.warmup ? '' : ja.play.enemyLevel(info.level);
+    this.levelEl.textContent = info.sub ?? (info.warmup ? '' : ja.play.enemyLevel(info.level));
     this.enemyNameEl.textContent = info.enemyName;
     this.setSidesVisible(this.features.hpBars && !info.warmup);
     this.comboEl.hidden = !(this.features.combo && !info.warmup);

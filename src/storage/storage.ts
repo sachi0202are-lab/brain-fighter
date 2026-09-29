@@ -199,7 +199,7 @@ export function normalize(d: Json): SaveData {
   const games = {} as Record<GameId, GameSave>;
   const rawGames = isObj(d.games) ? d.games : {};
   for (const g of GAME_IDS) games[g] = normGame(rawGames[g]);
-  return {
+  const out: SaveData = {
     version: 1,
     createdAt: isStr(d.createdAt) ? d.createdAt : base.createdAt,
     settings: {
@@ -213,6 +213,8 @@ export function normalize(d: Json): SaveData {
     trials: list(d.trials, normTrial),
     sessions: list(d.sessions, normSession),
   };
+  if (isStr(d.onboardedAt)) out.onboardedAt = d.onboardedAt;
+  return out;
 }
 
 // ---------------------------------------------------------------------------

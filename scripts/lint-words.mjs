@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * 文言チェック（仕様書 第12節・第5.1節・第9.5節の「使わない語」）。
- * 対象: src/ public/ README.md index.html vite.config.ts（manifest の説明文）。見つかれば exit 1。
+ * 対象: src/ public/（public/embed/ を含む）README.md index.html vite.config.ts（manifest の説明文）、
+ *       埋め込み用ページ embed/、E2E の親ページ（e2e/*.html = ブログ記事に貼った状態の再現）。見つかれば exit 1。
  *
  *   npm run lint:words
  *
@@ -12,7 +13,9 @@ import { dirname, extname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const TARGETS = ['src', 'public', 'README.md', 'index.html', 'vite.config.ts'];
+const TARGETS = ['src', 'public', 'README.md', 'index.html', 'vite.config.ts', 'embed'];
+/** 拡張子を絞って見る対象（E2E のテストコードは除き、親ページの HTML だけ） */
+const HTML_ONLY_TARGETS = ['e2e'];
 const TEXT_EXT = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs', '.css', '.html', '.json', '.md', '.svg', '.txt', '.webmanifest', '.xml', '.yml', '.yaml']);
 
 /** 第12節「使わない語」（そのままの形） */
@@ -105,19 +108,21 @@ function* walk(p) {
 selfTest();
 let count = 0;
 let files = 0;
-for (const t of TARGETS) {
-  for (const file of walk(join(ROOT, t))) {
-    files += 1;
-    const text = readFileSync(file, 'utf8');
-    const hits = check(text);
-    for (const hit of hits) {
-      const before = text.slice(0, hit.index);
-      const line = before.split('\n').length;
-      const col = hit.index - before.lastIndexOf('\n');
-      const src = text.split('\n')[line - 1].trim();
-      console.error(`${relative(ROOT, file)}:${line}:${col}  使わない語「${hit.label}」  ${src.slice(0, 120)}`);
-      count += 1;
-    }
+const targetFiles = [
+  ...TARGETS.flatMap((t) => [...walk(join(ROOT, t))]),
+  ...HTML_ONLY_TARGETS.flatMap((t) => [...walk(join(ROOT, t))].filter((f) => extname(f) === '.html')),
+];
+for (const file of targetFiles) {
+  files += 1;
+  const text = readFileSync(file, 'utf8');
+  const hits = check(text);
+  for (const hit of hits) {
+    const before = text.slice(0, hit.index);
+    const line = before.split('\n').length;
+    const col = hit.index - before.lastIndexOf('\n');
+    const src = text.split('\n')[line - 1].trim();
+    console.error(`${relative(ROOT, file)}:${line}:${col}  使わない語「${hit.label}」  ${src.slice(0, 120)}`);
+    count += 1;
   }
 }
 if (count > 0) {

@@ -36,6 +36,8 @@ export interface SaveData {
   // ---- 拡張 ----
   /** 「今日のセッション」の記録（1日2回まで・4時間あける の判定用） */
   sessions?: SessionRecord[];
+  /** 初回の案内（オンボーディング）を終えた日時（ISO）。無ければ初回起動として案内を出す */
+  onboardedAt?: string;
 }
 
 export interface RoundRecord {

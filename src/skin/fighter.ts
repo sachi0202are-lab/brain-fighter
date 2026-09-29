@@ -2,7 +2,7 @@
  * シルエットのファイター（単純な図形の組合せ。外部画像素材は使わない）。
  * ラウンド間・結果画面だけで描く。刺激領域（ゲーム中の Canvas）には描かない。
  */
-export type Pose = 'guard' | 'victory' | 'down';
+export type Pose = 'guard' | 'victory' | 'down' | 'strike';
 
 interface Pt {
   x: number;
@@ -23,6 +23,26 @@ function joints(pose: Pose): { head: Pt; neck: Pt; hip: Pt; limbs: Pt[][]; fists
         [{ x: -0.32, y: -0.07 }, { x: -0.22, y: -0.03 }, { x: -0.1, y: -0.04 }],
       ],
       fists: [{ x: -0.08, y: -0.16 }, { x: -0.1, y: -0.04 }],
+    };
+  }
+  if (pose === 'strike') {
+    // 踏み込んで前の手を伸ばした形（必殺演出の一瞬だけ。ラウンド間のみ）
+    const sh = { x: 0.06, y: -0.72 };
+    const hp = { x: -0.04, y: -0.44 };
+    const arms: Pt[][] = [
+      [sh, { x: 0.28, y: -0.72 }, { x: 0.5, y: -0.73 }],
+      [sh, { x: 0.12, y: -0.6 }, { x: 0.16, y: -0.74 }],
+    ];
+    return {
+      head: { x: 0.1, y: -0.86 },
+      neck: { x: 0.07, y: -0.77 },
+      hip: hp,
+      limbs: [
+        [hp, { x: 0.2, y: -0.26 }, { x: 0.3, y: 0 }],
+        [hp, { x: -0.18, y: -0.22 }, { x: -0.34, y: 0 }],
+        ...arms,
+      ],
+      fists: arms.map((a) => a[2] as Pt),
     };
   }
   const shoulder = { x: 0.01, y: -0.75 };
@@ -67,6 +87,8 @@ export interface FighterOptions {
   facing: 1 | -1;
   pose: Pose;
   color: string;
+  /** 不透明度（残像用。既定 1） */
+  alpha?: number;
 }
 
 export function drawFighter(ctx: CanvasRenderingContext2D, o: FighterOptions): void {
@@ -74,6 +96,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, o: FighterOptions): v
   const h = o.height;
   const P = (p: Pt): [number, number] => [o.x + p.x * h * o.facing, o.ground + p.y * h];
   ctx.save();
+  if (o.alpha !== undefined) ctx.globalAlpha = Math.max(0, Math.min(1, o.alpha));
   ctx.strokeStyle = o.color;
   ctx.fillStyle = o.color;
   ctx.lineCap = 'round';
@@ -128,9 +151,14 @@ export function drawScene(ctx: CanvasRenderingContext2D, o: SceneOptions): void 
   ctx.restore();
 }
 
+const STAGE_HUES = [28, 200, 140, 265, 350, 45, 175, 225, 5, 300];
+
+/** ステージの色相（敵レベルから決める） */
+export function stageHue(level: number): number {
+  return STAGE_HUES[Math.abs(Math.round(level)) % STAGE_HUES.length] as number;
+}
+
 /** ステージごとの単色背景（敵レベルから決める静的な色） */
 export function stageColor(level: number): string {
-  const hues = [28, 200, 140, 265, 350, 45, 175, 225, 5, 300];
-  const hue = hues[Math.abs(Math.round(level)) % hues.length] as number;
-  return `hsl(${hue} 42% 58%)`;
+  return `hsl(${stageHue(level)} 42% 58%)`;
 }

@@ -1,0 +1,62 @@
+/*
+ * ブログ埋め込み（/embed/）のコンパクト版と、設定画面の埋め込みコード。
+ * 埋め込み時は <html class="embed">（iframe の中。幅は最大 420px 程度）。
+ */
+html.embed #app {
+  width: 100%;
+}
+
+html.embed .screen:not(.play) {
+  gap: 10px;
+  padding: 8px 12px calc(16px + env(safe-area-inset-bottom));
+}
+
+html.embed .hero {
+  padding: 12px;
+}
+
+html.embed .hero-num {
+  font-size: 44px;
+  margin: 2px 0 4px;
+}
+
+html.embed .game-card {
+  padding: 10px 14px;
+}
+
+html.embed .game-card .muted.small {
+  display: none;
+}
+
+html.embed .game-card-foot {
+  margin-top: 4px;
+}
+
+.embed-note {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.fullscreen-link {
+  white-space: nowrap;
+}
+
+/* 設定: 埋め込みコード（選択してコピーできる） */
+.embed-code {
+  width: 100%;
+  resize: vertical;
+  font: 0.75rem / 1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text-2);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.status.is-warn {
+  color: var(--text);
+  font-weight: 400;
+}

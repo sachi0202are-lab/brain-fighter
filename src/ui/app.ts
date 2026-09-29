@@ -12,6 +12,8 @@ import { browserStorage, type StorageLike } from '../storage/storage';
 import { Store } from '../storage/store';
 import type { RoundOutcome } from '../skin/hp';
 import { parseRoute, type Route } from './router';
+import './app.css';
+import './embed.css';
 
 export interface AppFlags {
   /** ?test=1: テスト用フック window.__bfTest を出す */
@@ -20,6 +22,11 @@ export interface AppFlags {
   seed: number | null;
   /** ?test=1&fx=off|light|full: 演出プリセットの一時上書き（テスト用） */
   fx: FxPreset | null;
+  /**
+   * 初回オンボーディングを出すか。通常は常に true（初回だけ出る）。
+   * ?test=1 のときは既存のテストの流れを変えないため false（?test=1&onboarding=1 で出す）。
+   */
+  onboarding: boolean;
 }
 
 export function parseFlags(search: string): AppFlags {
@@ -30,6 +37,7 @@ export function parseFlags(search: string): AppFlags {
     test,
     seed: parseSeed(search),
     fx: test && (FX_PRESETS as readonly (string | null)[]).includes(fx) ? (fx as FxPreset) : null,
+    onboarding: !test || q.get('onboarding') === '1',
   };
 }
 
@@ -106,6 +114,8 @@ const LAST_MATCH_KEY = 'brain-fighter.lastMatch';
 export class App {
   readonly store: Store;
   readonly flags: AppFlags;
+  /** ブログ埋め込み用のコンパクト版（/embed/）で動いているか */
+  readonly embed: boolean;
   readonly sound = new SoundPlayer();
   readonly runners = new RunnerHub();
   readonly testLog: TestRoundLog[] = [];
@@ -117,9 +127,11 @@ export class App {
 
   constructor(
     readonly root: HTMLElement,
-    opts: { storage?: StorageLike | null; search?: string } = {},
+    opts: { storage?: StorageLike | null; search?: string; embed?: boolean } = {},
   ) {
     this.flags = parseFlags(opts.search ?? location.search);
+    this.embed = opts.embed ?? false;
+    if (this.embed) document.documentElement.classList.add('embed');
     this.store = new Store(opts.storage === undefined ? browserStorage() : opts.storage);
     this.frameReady = measureFrameMs().then((ms) => (this.frameMs = ms));
     // 音は最初のタップ・キー操作まで出さない（自動再生制限・埋め込み時）
@@ -141,6 +153,12 @@ export class App {
     const hash = `#${path}`;
     if (location.hash === hash) this.render();
     else location.hash = hash;
+  }
+
+  /** 初回起動（記録も案内済みの印も無い）なら、ホームの代わりにオンボーディングを出す */
+  needsOnboarding(): boolean {
+    const d = this.store.data;
+    return this.flags.onboarding && !d.onboardedAt && d.rounds.length === 0 && d.certs.length === 0;
   }
 
   /** いま有効な演出プリセット */
@@ -174,7 +192,8 @@ export class App {
     if (!this.screens) return;
     this.cleanup?.();
     this.cleanup = null;
-    const route = parseRoute(location.hash);
+    let route = parseRoute(location.hash);
+    if (route.name === 'home' && this.needsOnboarding()) route = { name: 'welcome' };
     this.root.replaceChildren();
     document.body.dataset.route = route.name;
     const mount = this.screens[route.name];

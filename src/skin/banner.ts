@@ -25,6 +25,29 @@ export function outcomeBanner(o: RoundOutcome, koNext: number | null): HTMLEleme
   return wrap;
 }
 
+/**
+ * 結果画面の見出し: KO と PERFECT の数（Light / Full）。どちらも 0 なら出さない
+ * （判定負けは各ラウンドの行に情報として出すだけで、見出しにはしない）。
+ */
+export function outcomeHeadline(outcomes: readonly (RoundOutcome | null)[]): HTMLElement | null {
+  const ko = outcomes.filter((o) => o === 'ko').length;
+  const perfect = outcomes.filter((o) => o === 'perfect').length;
+  if (ko + perfect === 0) return null;
+  const wrap = document.createElement('div');
+  wrap.className = 'result-headline';
+  wrap.dataset.testid = 'result-headline';
+  const add = (cls: string, label: string, n: number): void => {
+    if (n === 0) return;
+    const e = document.createElement('span');
+    e.className = cls;
+    e.textContent = ja.outcome.count(label, n);
+    wrap.append(e);
+  };
+  add('headline-perfect', ja.outcome.perfect, perfect);
+  add('headline-ko', ja.outcome.ko, ko);
+  return wrap;
+}
+
 /** 技名テロップ（Full のみ・ラウンド間のみ。スライドインするだけで点滅しない） */
 export function specialTelop(seed: number): HTMLElement {
   const e = document.createElement('div');

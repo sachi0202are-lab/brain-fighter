@@ -1,0 +1,56 @@
+/*
+ * 演出（skin）の追加分。仕様書 9.5: 点滅・画面揺れ・フラッシュ・ヒットストップ・スローは使わない。
+ * CSS で動くのは、ラウンド間・結果画面での「一度きりの登場」だけ（繰り返すアニメーションは無い）。
+ * ラウンド中（刺激の提示中）に動く要素は置かない。
+ */
+
+/* Full: 静的なカスタム背景。画面の下端（応答ボタンの後ろ）だけに置き、刺激領域には重ならない */
+.play.fx-full {
+  background:
+    var(--stage-art, none) center bottom / 100% 20% no-repeat,
+    radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--stage, #5a6aa8) 32%, var(--bg)) 0%, var(--bg) 72%);
+}
+
+/* Light / Full: ラウンド間の KO / PERFECT / 判定は一度だけ静かに出る */
+.intermission .outcome-logo {
+  animation: logo-in 320ms ease-out 1 both;
+}
+
+@keyframes logo-in {
+  from {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* 結果画面の見出し（KO × n ・ PERFECT × n） */
+.result-headline {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 0.03em;
+}
+
+.result-headline .headline-ko {
+  font-size: 2.2rem;
+  color: var(--accent);
+}
+
+.result-headline .headline-perfect {
+  font-size: 2.2rem;
+  color: #ffd166;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intermission .outcome-logo {
+    animation: none;
+  }
+}

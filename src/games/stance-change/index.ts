@@ -1,150 +1,139 @@
 /**
- * スタンスチェンジ — フェーズ1のスタブ（仮実装）。
+ * スタンスチェンジ（認知的柔軟性。手がかり付きタスク切替）— 仕様書 6.3。
  *
- * フェーズ2で仕様書 6.3（手がかり付きタスク切替: 30 試行、ステップ 1〜20、D と CSI のラダー、
- * ウォームアップ 12 試行）に置き換える。いまはエンジンの次の経路を通すための最小限の中身:
- *   - 試合冒頭のウォームアップ（createWarmup。適応なし・戦闘力なし）
- *   - 手がかり（cue）→ 刺激＋応答期限（untilResponse）
- *   - ブロック単位のしきい値ルール（≥ 90% 昇格 / 75〜89% 維持 / < 75% 降格）
- *   - 固有指標（反復／切替の RT、切替コスト、混合コスト）
+ * 1試行: 構え（手がかり）を CSI ms → 攻撃アイコン（応答期限 D。答えた時点で次へ）→ 正誤フィードバック 300 ms → 試行間隔 500 ms。
+ * アイコンは二価（2 ルール: 高さ・色）または三価（3 ルール: ＋形）の刺激で、応答は左右2ボタン共通
+ * （左 = 上段・橙・丸、右 = 下段・青・角）。期限切れは誤答（kind 'timeout'）。
+ *
+ * 1試合 = 単一課題ウォームアップ 12 試行（構えAのみ・同じ D と CSI。適応・戦闘力・HP なし）＋ 30 試行 × 3 ラウンド。
+ * 難度はステップ 1〜20 のラダー（ladder.ts）をラウンド単位で上下する（≥ 90% で +1、< 75% で −1）。
+ *
+ * 部品: model.ts（型）/ ladder.ts（ラダー・適応・認定戦・戦闘力）/ sequence.ts（系列）/ render.ts（描画）/ metrics.ts（記録・一言）
  */
-import { blockPower } from '../../engine/power';
-import { balancedSequence } from '../../engine/sequence';
-import { blockThresholdStep, type BlockRuleConfig } from '../../engine/staircase';
-import { median } from '../../engine/stats';
-import type { GameModule, PhaseSpec, ResponseLayout } from '../../engine/types';
+import type { GameModule, Judgement, PhaseSpec, ResponseLayout, RoundKind, RoundOptions } from '../../engine/types';
 import { stanceChangeText as text } from '../../i18n/ja/stance-change';
-import type { Rng } from '../../engine/rng';
+import { certTierParams, clampStep, ladderParams, nextStep, stancePower } from './ladder';
+import { stanceMetrics, tipKey } from './metrics';
+import { activeRules, correctSide, RULE_LETTER, type Rule, type ScParams, type ScTrial, type Side, type Transition } from './model';
+import { renderStance, SURFACES } from './render';
+import { makeRoundTrials, makeWarmupTrials, WARMUP_RULE } from './sequence';
 
-export type ScParams = { step: number };
-export type ScRule = 'shape' | 'color';
-export interface ScTrial {
-  rule: ScRule;
-  shape: 'circle' | 'square';
-  color: 'orange' | 'blue';
-  /** 直前の試行と構えが違う */
-  switched: boolean;
+export type { Rule, ScParams, ScTrial, Side, Transition } from './model';
+
+/** 正誤フィードバックの間 (ms)。1 ビットの表示は演出側がこの中で出す（仕様書 4.5: 300 ms 以内） */
+export const FEEDBACK_MS = 300;
+/** 試行間隔 (ms) */
+export const ITI_MS = 500;
+
+/** 左右のボタンの文言（使っている判断軸の値を並べる: 「上段・橙」「上段・橙・丸」） */
+export function responseLabels(rules: number, untrained: boolean): Record<Side, string> {
+  const values = untrained ? text.valuesUntrained : text.values;
+  const dims = activeRules(rules);
+  return {
+    left: dims.map((d) => values[d][0]).join(text.buttons.sep),
+    right: dims.map((d) => values[d][1]).join(text.buttons.sep),
+  };
 }
 
-const TRIALS_PER_ROUND = 6;
-const WARMUP_TRIALS = 4;
-const MAX_SAME_RULE = 4;
-export const STEP_RULE: BlockRuleConfig = { promoteAt: 0.9, demoteBelow: 0.75, min: 1, max: 20 };
+export function stanceLayout(params: ScParams, opts: Pick<RoundOptions, 'untrained'>): ResponseLayout {
+  const l = responseLabels(params.rules, opts.untrained);
+  return {
+    columns: 2,
+    rows: 1,
+    buttons: [
+      { id: 'left', label: l.left, ariaLabel: text.buttons.aria(text.buttons.left, l.left), keys: ['ArrowLeft', 'f', 'KeyF'], col: 1, row: 1 },
+      { id: 'right', label: l.right, ariaLabel: text.buttons.aria(text.buttons.right, l.right), keys: ['ArrowRight', 'j', 'KeyJ'], col: 2, row: 1 },
+    ],
+  };
+}
 
-const layout: ResponseLayout = {
-  columns: 2,
-  rows: 1,
-  buttons: [
-    { id: 'left', label: text.buttons.left, keys: ['ArrowLeft', 'f', 'KeyF'], col: 1, row: 1 },
-    { id: 'right', label: text.buttons.right, keys: ['ArrowRight', 'j', 'KeyJ'], col: 2, row: 1 },
-  ],
+/** 試行の記録用の短い文字列（TrialLog.stim） */
+const CODES: Readonly<Record<'train' | 'untrained', Readonly<Record<Rule, readonly [string, string]>>>> = {
+  train: { height: ['U', 'D'], color: ['o', 'b'], shape: ['r', 'q'] },
+  untrained: { height: ['L', 'S'], color: ['y', 'p'], shape: ['t', 'x'] },
 };
+const TRANSITION_CODE: Readonly<Record<Transition, string>> = { first: 'f', repeat: 'r', switch: 's', single: 'w' };
 
-const COLORS = { orange: '#ff9f1c', blue: '#2e86ff' } as const;
-
-function makeTrials(rng: Rng, n: number, rules: ScRule[]): ScTrial[] {
-  const shapes = balancedSequence(rng, n, ['circle', 'square'] as const, 3);
-  const colors = balancedSequence(rng, n, ['orange', 'blue'] as const, 3);
-  return rules.map((rule, i) => ({
-    rule,
-    shape: shapes[i] as ScTrial['shape'],
-    color: colors[i] as ScTrial['color'],
-    switched: i > 0 && rules[i - 1] !== rule,
-  }));
+/**
+ * 例 `As:Ub-:i>L` = 構えA・切替 / 上段・青・形なし / 不一致 / 正解は左。
+ * 構え A|B|C ＋ 移り変わり f(最初)|r(反復)|s(切替)|w(ウォームアップ) : 高さ U|D（未訓練 L|S）・色 o|b（y|p）・形 r|q（t|x、2 ルールは -）
+ * : 一致 c|不一致 i > 正解 L|R
+ */
+export function describeStance(t: ScTrial): string {
+  const c = CODES[t.untrained ? 'untrained' : 'train'];
+  const code = (v: Side | null, pair: readonly [string, string]): string => (v === null ? '-' : v === 'left' ? pair[0] : pair[1]);
+  const attrs = `${code(t.height, c.height)}${code(t.color, c.color)}${code(t.shape, c.shape)}`;
+  return `${RULE_LETTER[t.rule]}${TRANSITION_CODE[t.transition]}:${attrs}:${t.congruent ? 'c' : 'i'}>${correctSide(t) === 'left' ? 'L' : 'R'}`;
 }
 
-function correctSide(t: ScTrial): 'left' | 'right' {
-  if (t.rule === 'shape') return t.shape === 'circle' ? 'left' : 'right';
-  return t.color === 'orange' ? 'left' : 'right';
+/** 判定。無応答（期限切れ）は timeout、押し間違いはその試行の移り変わり（switch / repeat / first / single） */
+export function judgeStance(trial: ScTrial, response: Readonly<Record<string, string>> | null): Judgement {
+  const got = response?.main;
+  if (got === undefined) return { correct: false, kind: 'timeout' };
+  if (got === correctSide(trial)) return { correct: true };
+  return { correct: false, kind: trial.transition };
+}
+
+/** ラウンドのルールの一言（構えの意味を毎ラウンド出す） */
+export function introText(rules: number, kind: RoundKind, untrained = false): string {
+  const names = untrained ? text.stance.namesUntrained : text.stance.names;
+  const values = untrained ? text.valuesUntrained : text.values;
+  const line = (r: Rule): string => text.intro.rule(RULE_LETTER[r], names[r], values[r][0], values[r][1]);
+  if (kind === 'warmup') {
+    const ignored = activeRules(rules)
+      .filter((r) => r !== WARMUP_RULE)
+      .map((r) => names[r]);
+    return text.intro.warmup(line(WARMUP_RULE), text.intro.and(ignored));
+  }
+  return activeRules(rules).map(line).join(text.intro.join);
 }
 
 export const game: GameModule<ScParams, ScTrial> = {
   id: 'stance-change',
-  initialParams: { step: 1 },
+  initialParams: ladderParams(1),
+  surfaceCount: SURFACES.length,
 
-  createWarmup(_params, rng) {
-    return makeTrials(rng, WARMUP_TRIALS, Array<ScRule>(WARMUP_TRIALS).fill('shape'));
-  },
+  /** 保存値のステップからラダーの難度を作り直す（D・CSI・ルール数は常にラダーと一致させる） */
+  restoreParams: (saved) => ladderParams(saved.step ?? 1),
 
-  createRound(_params, rng) {
-    // 切替率 50%（完全ランダム）、同じ構えの連続は 4 回まで
-    const rules: ScRule[] = [rng.pick<ScRule>(['shape', 'color'])];
-    const switches = balancedSequence(rng, TRIALS_PER_ROUND - 1, [true, false], 3);
-    for (const sw of switches) {
-      const prev = rules[rules.length - 1] as ScRule;
-      let run = 0;
-      for (let k = rules.length - 1; k >= 0 && rules[k] === prev; k--) run++;
-      const other: ScRule = prev === 'shape' ? 'color' : 'shape';
-      rules.push(sw || run >= MAX_SAME_RULE ? other : prev);
-    }
-    return makeTrials(rng, TRIALS_PER_ROUND, rules);
-  },
+  createRound: (params, rng, opts) => makeRoundTrials(rng, params.rules, opts.untrained),
 
-  phases(): PhaseSpec[] {
-    return [
-      { name: 'cue', ms: 400 },
-      { name: 'stimulus', ms: 1500, input: true, untilResponse: true },
-      { name: 'feedback', ms: 250 },
-      { name: 'iti', ms: 300 },
-    ];
-  },
+  createWarmup: (params, rng, opts) => makeWarmupTrials(rng, params.rules, opts.untrained),
 
-  responseLayout: () => layout,
+  phases: (_trial, params): PhaseSpec[] => [
+    { name: 'cue', ms: params.CSI },
+    { name: 'stimulus', ms: params.D, input: true, untilResponse: true },
+    { name: 'feedback', ms: FEEDBACK_MS },
+    { name: 'iti', ms: ITI_MS },
+  ],
 
-  renderStimulus(ctx, trial, phase, _t, view) {
-    const s = view.size;
-    const c = s / 2;
-    if (phase === 'cue' || phase === 'stimulus') {
-      ctx.fillStyle = '#f3f5ff';
-      ctx.font = `bold ${Math.round(s * 0.07)}px system-ui, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(trial.rule === 'shape' ? text.stances.shape : text.stances.color, c, s * 0.14);
-    }
-    if (phase === 'stimulus') {
-      const r = s * 0.12;
-      ctx.fillStyle = COLORS[trial.color];
-      ctx.beginPath();
-      if (trial.shape === 'circle') ctx.arc(c, c + s * 0.05, r, 0, Math.PI * 2);
-      else ctx.rect(c - r, c + s * 0.05 - r, r * 2, r * 2);
-      ctx.fill();
-    }
-  },
+  responseLayout: stanceLayout,
 
-  judge(trial, response) {
-    if (!response) return { correct: false, kind: 'timeout' };
-    return response.main === correctSide(trial) ? { correct: true } : { correct: false, kind: trial.switched ? 'switch' : 'repeat' };
-  },
+  renderStimulus: (ctx, trial, phase, _t, view) => renderStance(ctx, trial, phase, view),
+
+  judge: judgeStance,
 
   expectedResponse: (trial) => ({ main: correctSide(trial) }),
 
-  describeTrial: (t) => `${t.rule}:${t.shape}/${t.color}${t.switched ? ':sw' : ''}`,
+  describeTrial: describeStance,
 
-  adapt(params, round) {
-    return { step: blockThresholdStep(params.step, round.accuracy, STEP_RULE) };
+  adapt: (params, round) => ladderParams(nextStep(params.step, round.accuracy)),
+
+  power: (params, last) => stancePower(params.step, last),
+
+  certParams: certTierParams,
+
+  enemyLevel: (params) => clampStep(params.step),
+
+  metrics: (round, ctx) => stanceMetrics(round, ctx.warmup),
+
+  roundTip(round) {
+    const key = tipKey(round);
+    if (key === 'generic') return text.tips[(Math.max(1, round.roundNo) - 1) % text.tips.length] as string;
+    return text.tipFor[key];
   },
 
-  power(params, last) {
-    return blockPower({ level: params.step, levels: 20, acc: last?.accuracy ?? 0, accDown: 0.75, accUp: 0.9 });
-  },
-
-  certParams: (tier) => ({ step: Math.min(20, Math.max(1, tier * 2 - 1)) }),
-
-  enemyLevel: (params) => params.step,
-
-  metrics(round, ctx) {
-    const rtOf = (pred: (t: ScTrial) => boolean): number | undefined =>
-      median(round.results.filter((r) => r.correct && r.rtMs !== undefined && pred(r.trial)).map((r) => r.rtMs as number));
-    const out: Record<string, number> = { step: round.paramsPlayed.step };
-    const rep = rtOf((t) => !t.switched);
-    const sw = rtOf((t) => t.switched);
-    if (rep !== undefined) out.rtRepeat = Math.round(rep);
-    if (sw !== undefined) out.rtSwitch = Math.round(sw);
-    if (rep !== undefined && sw !== undefined) out.switchCost = Math.round(sw - rep);
-    const single = ctx.warmup?.rtMedianMs;
-    if (rep !== undefined && single !== undefined) out.mixingCost = Math.round(rep - single);
-    return out;
-  },
-
-  roundTip: (round) => text.tips[(round.roundNo - 1 + text.tips.length) % text.tips.length] as string,
+  /** info.untrained は今のインターフェースには無い（認定戦の画面が渡せるようになれば未訓練セットの呼び名で出す） */
+  roundIntro: (params, info: { kind: RoundKind; roundNo: number; untrained?: boolean }) =>
+    introText(params.rules, info.kind, info.untrained === true),
 };

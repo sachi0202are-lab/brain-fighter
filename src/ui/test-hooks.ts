@@ -22,16 +22,71 @@ export interface BfTestApi {
   /** 自動プレイ（既定: 5 試行に1回誤る = 正答率 80%）。応答窓が開いてから delayMs 後に答える */
   autoplay(opts?: { delayMs?: number; correct?: (i: number) => boolean }): void;
   stopAutoplay(): void;
-  /** この画面セッションで実行したラウンドの詳しいログ */
+  /** この画面セッションで実行したラウンドの詳しいログ（認定戦のラウンドは kind = 'cert'） */
   logs(): App['testLog'];
+  /**
+   * 受け入れ基準 8 の点検を始める: 刺激の提示が始まるたびに、動いているアニメーション・刺激領域に重なる要素・
+   * オーバーレイの有無を調べ、正誤表示（1 ビット）の出た時刻を集める。
+   */
+  startFxAudit(): void;
+  fxAuditReport(): FxAuditReport;
   /** 保存データ */
   save(): App['store']['data'];
   frameMs(): number;
 }
 
+export interface FxAuditReport {
+  /** 調べた刺激提示の回数 */
+  stimulusPhases: number;
+  /** 刺激の提示中に見つかった問題（動いている演出・刺激領域に重なる要素など） */
+  violations: string[];
+  /** 正誤表示が出た回数と、任意の 1 秒間に出た回数の最大 */
+  feedbackShown: number;
+  maxFeedbackPerSecond: number;
+}
+
+interface FxAuditState {
+  stimulusPhases: number;
+  violations: string[];
+  feedbackOn: number[];
+}
+
+function intersects(a: DOMRect, b: DOMRect): boolean {
+  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom && a.width > 0 && a.height > 0;
+}
+
+/** 刺激の提示中の画面を調べる（刺激領域の中で動くもの・重なるものが無いこと） */
+function auditStimulus(a: FxAuditState, i: number): void {
+  const stim = document.querySelector('canvas.stim');
+  if (!stim) return;
+  const rect = stim.getBoundingClientRect();
+  if (document.querySelector('.overlay:not([hidden])')) a.violations.push(`試行 ${i}: 刺激の提示中にオーバーレイが出ている`);
+  for (const anim of document.getAnimations()) {
+    if (anim.playState !== 'running') continue;
+    const target = (anim.effect as KeyframeEffect | null)?.target;
+    if (target instanceof Element && intersects(target.getBoundingClientRect(), rect)) {
+      a.violations.push(`試行 ${i}: 刺激領域に重なる要素 ${target.className} が動いている`);
+    }
+  }
+  const inset = 3;
+  const points: [number, number][] = [
+    [rect.left + inset, rect.top + inset],
+    [rect.right - inset, rect.top + inset],
+    [rect.left + inset, rect.bottom - inset],
+    [rect.right - inset, rect.bottom - inset],
+    [(rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2],
+  ];
+  for (const [x, y] of points) {
+    const top = document.elementFromPoint(x, y);
+    if (top && top !== stim) a.violations.push(`試行 ${i}: 刺激領域の上に ${top.tagName.toLowerCase()}.${top.className} が重なっている`);
+  }
+}
+
 export function installTestHooks(app: App): void {
   if (!app.flags.test) return;
   let stop: (() => void) | null = null;
+  let audit: FxAuditState | null = null;
+  let stopAudit: (() => void) | null = null;
 
   const api: BfTestApi = {
     version: 1,
@@ -82,6 +137,63 @@ export function installTestHooks(app: App): void {
       stop = null;
     },
     logs: () => app.testLog,
+    startFxAudit: () => {
+      stopAudit?.();
+      const a: FxAuditState = { stimulusPhases: 0, violations: [], feedbackOn: [] };
+      audit = a;
+      let detach: (() => void) | null = null;
+      const attach = (r: AnyRunner | null): void => {
+        detach?.();
+        detach = null;
+        if (!r) return;
+        detach = r.events.on('phase', (e) => {
+          if (e.phase !== 'stimulus') return;
+          a.stimulusPhases += 1;
+          // 刺激を描いたフレームの直後に調べる
+          requestAnimationFrame(() => auditStimulus(a, e.i));
+        });
+      };
+      const unsub = app.runners.subscribe(attach);
+      attach(app.runners.current);
+      // 正誤表示が「出た」回数を数える。1回の表示でも「消す → 出す」の2つの変更が同時に届くので、
+      // 各変更の新しい値（= 次の変更の oldValue、最後はいまの値）が ok / ng のものだけ数える
+      const mo = new MutationObserver((muts) => {
+        const now = performance.now();
+        const byTarget = new Map<Element, MutationRecord[]>();
+        for (const m of muts) {
+          const el = m.target as Element;
+          if (el.getAttribute('data-testid') !== 'feedback') continue;
+          byTarget.set(el, [...(byTarget.get(el) ?? []), m]);
+        }
+        for (const [el, recs] of byTarget) {
+          recs.forEach((_, k) => {
+            const next = k + 1 < recs.length ? (recs[k + 1] as MutationRecord).oldValue : el.getAttribute('data-state');
+            if (next === 'ok' || next === 'ng') a.feedbackOn.push(now);
+          });
+        }
+      });
+      mo.observe(document.body, { subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['data-state'] });
+      stopAudit = () => {
+        unsub();
+        detach?.();
+        mo.disconnect();
+      };
+    },
+    fxAuditReport: () => {
+      const a = audit ?? { stimulusPhases: 0, violations: [], feedbackOn: [] };
+      let maxPerSecond = 0;
+      for (let k = 0; k < a.feedbackOn.length; k++) {
+        let n = 0;
+        for (let j = k; j < a.feedbackOn.length && (a.feedbackOn[j] as number) - (a.feedbackOn[k] as number) < 1000; j++) n += 1;
+        maxPerSecond = Math.max(maxPerSecond, n);
+      }
+      return {
+        stimulusPhases: a.stimulusPhases,
+        violations: [...a.violations],
+        feedbackShown: a.feedbackOn.length,
+        maxFeedbackPerSecond: maxPerSecond,
+      };
+    },
     save: () => app.store.data,
     frameMs: () => app.frameMs,
   };

@@ -2,6 +2,7 @@
  * 記録: 総合戦闘力の日別推移・ゲーム別の推移・ベルトの推移・ラウンドの正答率を、それぞれ別のグラフに。
  * 訓練内スコア（戦闘力）と認定戦（ベルト）の違いの説明を置く。
  */
+import { accuracyOf, isIncomplete } from '../../cert/cert';
 import { dayNumber, fromDayNumber } from '../../engine/dates';
 import { allTrainingDays, WEEK_GOAL_DAYS, weekTrainingDays } from '../../engine/session';
 import { beltName, gameText, ja } from '../../i18n/ja';
@@ -11,8 +12,9 @@ import { beltHistory, dailyGameSeries, dailyTotalSeries, roundAccuracySeries, tr
 import type { App } from '../app';
 import { chart, niceTicks, type ChartSeries } from '../charts';
 import { h } from '../dom';
-import { fmtInt, fmtMonthDay, fmtPct } from '../format';
+import { fmtDate, fmtInt, fmtMonthDay, fmtPct } from '../format';
 import { topBar } from './home';
+import './cert.css';
 
 const dateX = (x: number): string => fmtMonthDay(fromDayNumber(x));
 
@@ -105,6 +107,42 @@ export function mountRecords(app: App, root: HTMLElement): () => void {
         xHeading: ja.records.date,
         emptyText: ja.records.beltEmpty,
       }),
+    ),
+  );
+
+  main.append(h('p', { class: 'muted small' }, ja.records.beltNote));
+
+  // 3b. 認定戦の記録（新しい順。合否と正答率だけ）
+  const certs = [...d.certs].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+  main.append(
+    h(
+      'section',
+      { class: 'card', 'data-testid': 'cert-history' },
+      h('h2', { class: 'card-title' }, ja.records.certHistory),
+      certs.length === 0
+        ? h('p', { class: 'muted small' }, ja.records.certHistoryEmpty)
+        : h(
+            'ul',
+            { class: 'cert-history' },
+            ...certs.map((c) =>
+              h(
+                'li',
+                { 'data-game': c.gameId, 'data-passed': String(c.passed) },
+                h('span', { class: 'cert-history-date' }, fmtDate(c.at)),
+                h('strong', null, gameText(c.gameId).name),
+                h(
+                  'span',
+                  { class: c.passed ? 'is-passed' : 'muted' },
+                  c.passed ? ja.cert.passed : isIncomplete(c) ? ja.cert.incomplete : ja.cert.failed,
+                ),
+                h(
+                  'span',
+                  { class: 'cert-history-accs' },
+                  `${ja.cert.tierLabel(beltName(c.tier))}　${ja.cert.accuracies(c.rounds.map((r) => fmtPct(accuracyOf(r))))}`,
+                ),
+              ),
+            ),
+          ),
     ),
   );
 

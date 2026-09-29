@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { collectErrors } from './helpers';
+import { collectErrors, saveData, seedSave } from './helpers';
 
 test('localStorage が使えない環境でも起動し、設定画面で知らせる（受け入れ基準 5）', async ({ page }) => {
   const errors = collectErrors(page);
@@ -19,22 +19,31 @@ test('localStorage が使えない環境でも起動し、設定画面で知ら�
   expect(errors).toEqual([]);
 });
 
-test('難度・補助・スキップを選ぶ操作が無い（受け入れ基準 2 の一部）', async ({ page }) => {
+test('難度・補助・スキップを選ぶ操作が無い（受け入れ基準 2）', async ({ page }) => {
+  // 認定戦の画面に「受ける」ボタンが出るよう、1ゲームだけ条件（訓練 3 日）を満たした記録を入れておく
+  await seedSave(page, saveData({ 'double-hit': { days: 3 } }));
   const screens: [string, string][] = [
-    ['#/', 'total-power'],
-    ['#/settings', 'settings'],
-    ['#/records', 'records'],
-    ['#/cert', 'cert'],
-    ['#/play/double-hit', 'ready'],
-    ['#/play/combo-recall', 'ready'],
-    ['#/play/stance-change', 'ready'],
+    ['./?test=1#/', 'total-power'],
+    ['./?test=1#/settings', 'settings'],
+    ['./?test=1#/records', 'records'],
+    ['./?test=1#/cert', 'cert'],
+    ['./?test=1#/cert/run/double-hit', 'cert-ready'],
+    ['./?test=1#/welcome', 'welcome'],
+    ['./?test=1#/play/double-hit', 'ready'],
+    ['./?test=1#/play/combo-recall', 'ready'],
+    ['./?test=1#/play/stance-change', 'ready'],
+    ['./embed/?test=1#/', 'total-power'],
   ];
-  for (const [hash, testid] of screens) {
-    await page.goto(`./?test=1${hash}`);
+  for (const [url, testid] of screens) {
+    await page.goto(url);
     await expect(page.getByTestId(testid)).toBeVisible();
     const text = await page.locator('body').innerText();
-    expect(text, hash).not.toMatch(/難易度|難度を選|難度選択|かんたん|簡単モード|スキップ|ヒント|補助|スロー/);
-    expect(await page.locator('select').count(), hash).toBe(0);
+    expect(text, url).not.toMatch(/難易度|難度を選|難度選択|かんたん|簡単モード|スキップ|ヒント|補助|スロー/);
+    expect(await page.locator('select').count(), url).toBe(0);
+    expect(await page.locator('input[type="range"], input[type="number"]').count(), url).toBe(0);
+    // 選べるのは演出プリセットだけ（難度を選ぶラジオボタンは無い）
+    const radios = await page.locator('input[type="radio"]').evaluateAll((els) => els.map((e) => (e as HTMLInputElement).name));
+    expect(radios.every((n) => n === 'fx' || n === 'welcome-fx'), url).toBe(true);
   }
 });
 

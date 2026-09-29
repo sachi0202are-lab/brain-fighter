@@ -51,6 +51,7 @@ function richData(): SaveData {
   d.certs = [{ id: 'c1', gameId: 'double-hit', at: '2026-09-20T10:00:00.000Z', tier: 2, rounds: [{ trials: 24, correct: 20 }, { trials: 24, correct: 21 }], passed: true }];
   d.trials = [trial('r1', 0), trial('r1', 1)];
   d.sessions = [{ id: 's1', startedAt: '2026-09-28T00:58:00.000Z', endedAt: '2026-09-28T01:10:00.000Z', order: ['double-hit', 'combo-recall', 'stance-change'], done: ['double-hit'] }];
+  d.onboardedAt = '2026-09-01T00:01:00.000Z';
   return d;
 }
 

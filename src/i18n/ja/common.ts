@@ -12,6 +12,8 @@ export const common = {
     settings: '設定',
     cert: '昇段審査',
     back: 'もどる',
+    /** 埋め込み（/embed/）から本体を新しいタブで開く */
+    fullscreen: '全画面で開く',
   },
 
   home: {
@@ -25,6 +27,7 @@ export const common = {
     sessionLimit: '今日のセッションは2回とも終わりました。また明日。',
     weekDays: (x: number, goal: number): string => `今週 ${x} / ${goal} 日`,
     certReady: '昇段審査に挑めます',
+    certReadyGames: (games: string): string => `昇段審査に挑めます（${games}）`,
     certButton: '昇段審査へ',
     notPlayed: 'まだ記録がありません',
   },
@@ -58,7 +61,8 @@ export const common = {
     ko: 'KO',
     perfect: 'PERFECT',
     decision: '判定負け',
-    koNext: (n: number): string => `次は あと ${n} 問で KO`,
+    koNext: (n: number): string => `次は ${n} 問正解で KO`,
+    count: (label: string, n: number): string => `${label} × ${n}`,
   },
 
   result: {
@@ -88,6 +92,9 @@ export const common = {
       '戦闘力は毎日の訓練ラウンドで到達した難度から計算する、ゲーム内の成績です。ベルトは週1回の認定戦（訓練とは別の形式・別の刺激で測る公式記録）で決まります。戦闘力が演出や慣れで上がっても、認定戦の結果は上がらないことがあります。',
     empty: 'まだ記録がありません。今日のセッションを遊ぶと、ここにグラフが出ます。',
     beltEmpty: 'まだ認定戦の記録がありません。',
+    beltNote: 'ベルトは認定戦に合格すると上がり、下がることはありません。',
+    certHistory: '認定戦の記録',
+    certHistoryEmpty: 'まだ認定戦を受けていません。',
     rounds: (n: number): string => `訓練ラウンド ${n} 本`,
     targetBand: '目安 75〜85%',
     tableView: '表で見る',
@@ -100,12 +107,35 @@ export const common = {
   cert: {
     title: '昇段審査（認定戦）',
     explain:
-      '固定の難度・初めて見る刺激・最小限の演出で2ラウンド行います。2ラウンドとも正答率 79% 以上で合格し、そのゲームのベルトが1つ上がります。不合格でもベルトは下がりません。',
+      '固定の難度・初めて見る刺激・最小限の演出で2ラウンド行います。2ラウンドとも正答率 79% 以上（コンボ・リコールは誤り 4 以下）で合格し、そのゲームのベルトが1つ上がります。不合格でもベルトは下がりません。',
     conditions: 'そのゲームの訓練が3日以上、かつ前回の認定戦から7日以上たつと挑めます。',
     ready: '挑めます',
     needDays: (have: number, need: number): string => `訓練 ${have} / ${need} 日`,
     nextDate: (date: string): string => `${date} から挑めます`,
-    preparing: '認定戦の実施画面は準備中です。',
+    maxed: '最上位のベルトです',
+    tierLabel: (belt: string): string => `${belt}の審査`,
+    startOne: (game: string): string => `${game}の審査を受ける`,
+    startAll: (n: number): string => `${n} ゲームまとめて受ける`,
+    noneReady: 'いま挑める審査はありません。訓練を続けると挑めるようになります。',
+    minimalNote: '審査中は体力ゲージ・KO・コンボ・効果音を出しません。刺激は訓練と違う見た目です。戦闘力と訓練の日数には数えません。',
+    attemptNote: '1ラウンド目を始めた時点で、その審査を受けたことになります（途中でやめると不合格として記録され、次に挑めるのは7日後です）。',
+    readyLabel: '昇段審査',
+    roundLabel: (n: number, total: number): string => `審査 ラウンド ${n}/${total}`,
+    roundEnd: (n: number): string => `ラウンド ${n} 終了`,
+    betweenNote: '次のラウンドも同じ難度です。',
+    passed: '合格',
+    failed: '不合格',
+    incomplete: '不合格（中断）',
+    roundAccuracy: (n: number, pct: string): string => `ラウンド ${n}　正答率 ${pct}`,
+    accuracies: (list: readonly string[]): string => (list.length > 0 ? `正答率 ${list.join(' ／ ')}` : '記録なし'),
+    beltLabel: 'いまのベルト',
+    nextCert: (game: string): string => `次の審査へ（${game}）`,
+    toSummary: '審査の結果へ',
+    summaryTitle: '審査の結果',
+    quitConfirm: '審査を中断しますか？ 中断した審査は不合格として記録され、次に挑めるのは7日後です。',
+    notAvailable: 'この審査はいまは受けられません。',
+    back: '昇段審査の画面へ',
+    cancel: 'やめる（まだ記録されません）',
   },
 
   settings: {
@@ -145,6 +175,37 @@ export const common = {
       '本アプリは娯楽・自己記録を目的とするゲームです。日常生活の能力向上や疾病の予防・治療を目的・保証するものではありません。医療機器ではありません。',
     privacy: '記録はこの端末のブラウザの中だけに保存されます。サーバーへは送りません。',
     version: (v: string): string => `バージョン ${v}`,
+    welcomeAgain: 'はじめの案内をもう一度見る',
+    embedHeading: 'ブログに埋め込む',
+    embedNote: 'WordPress の「カスタム HTML」ブロックに貼ると、記事の中で遊べます（ブログ内の記録は本体と別になります）。',
+    embedCopy: 'ブログ用の埋め込みコードをコピー',
+    embedCopied: '埋め込みコードをコピーしました。',
+    embedCopyFailed: '自動でコピーできませんでした。下のコードを選択したので、長押し（PC は Ctrl+C）でコピーしてください。',
+    embedCodeLabel: '埋め込みコード',
+  },
+
+  embed: {
+    note: 'ブログ内の記録は本体と別になります。本格的に続けるなら全画面で',
+  },
+
+  welcome: {
+    stepOf: (n: number, total: number): string => `${n} / ${total}`,
+    next: '次へ',
+    back: 'もどる',
+    start: 'はじめる',
+    title1: 'Brain Fighter へようこそ',
+    lead: '毎日 12〜15 分、3 つのミニゲームで戦闘力を上げよう',
+    body1:
+      '反応・記憶・切り替えを試す3分ミニゲーム集です。格闘ゲーム風の演出で、ゲーム内の成績（戦闘力）と自己ベストを記録できます。',
+    title2: 'あそび方',
+    items2: [
+      '「今日のセッション」で、3 つのミニゲームを 1 試合（3 ラウンド）ずつ遊びます。',
+      '難度はゲームが成績に合わせて自動で決めます。戦闘力は、到達した難度から計算するゲーム内の成績です。',
+      '週1回の昇段審査（認定戦）に合格すると、ベルトが上がります。',
+      '目安は週 3〜5 日。間があいても記録はそのまま残ります。',
+    ] as readonly string[],
+    title3: '演出を選ぶ',
+    note3: 'あとから設定でいつでも変えられます。どの演出でも、試行数・提示時間・刺激の間隔・応答期限は同じです。',
   },
 
   belts: ['白帯', '黄帯', '橙帯', '緑帯', '青帯', '紫帯', '茶帯', '赤帯', '黒帯', '黒帯二段'] as readonly string[],

@@ -1,5 +1,6 @@
 /**
- * 設定: 演出プリセット（Off/Light/Full）・音・色覚配慮・データのエクスポート／インポート／全消去・このアプリについて。
+ * 設定: 演出プリセット（Off/Light/Full）・音・色覚配慮・データのエクスポート／インポート／全消去・
+ * ブログ用の埋め込みコード・このアプリについて（免責文を常設）。
  * 難度に関わる設定は置かない（仕様書 4.2 MUST: 難度はアルゴリズムだけが決める）。
  */
 import { ja } from '../../i18n/ja';
@@ -7,8 +8,27 @@ import { downloadText, exportFileName, parseImport, serializeSaveData } from '..
 import { FX_PRESETS, type FxPreset } from '../../storage/schema';
 import type { App } from '../app';
 import { h } from '../dom';
+import { EMBED_SNIPPET } from '../embed-code';
 import { fmtDate } from '../format';
 import { topBar } from './home';
+
+/**
+ * 埋め込みコードをクリップボードへ。navigator.clipboard が無い・失敗したときは、
+ * テキストエリアの中身を選択して手でコピーできるようにする。
+ */
+export async function copyEmbedCode(textarea: HTMLTextAreaElement): Promise<boolean> {
+  try {
+    const clip = (navigator as Navigator & { clipboard?: Clipboard }).clipboard;
+    if (!clip || typeof clip.writeText !== 'function') throw new Error('clipboard unavailable');
+    await clip.writeText(textarea.value);
+    return true;
+  } catch {
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+    return false;
+  }
+}
 
 export function mountSettings(app: App, root: HTMLElement): () => void {
   const render = (message = ''): void => {
@@ -143,6 +163,41 @@ export function mountSettings(app: App, root: HTMLElement): () => void {
       ),
     );
 
+    // ---- ブログ用の埋め込みコード（仕様書 第11節） ----
+    const code = h('textarea', {
+      class: 'embed-code',
+      readonly: true,
+      rows: 6,
+      spellcheck: 'false',
+      'aria-label': ja.settings.embedCodeLabel,
+      'data-testid': 'embed-code',
+    });
+    code.value = EMBED_SNIPPET;
+    const copyStatus = h('p', { class: 'status', role: 'status', 'aria-live': 'polite', 'data-testid': 'embed-copy-status' });
+    const embed = h(
+      'section',
+      { class: 'card stack', 'data-testid': 'embed-card' },
+      h('h2', { class: 'card-title' }, ja.settings.embedHeading),
+      h('p', { class: 'muted small' }, ja.settings.embedNote),
+      h(
+        'button',
+        {
+          type: 'button',
+          class: 'btn block',
+          'data-testid': 'embed-copy',
+          onclick: () => {
+            void copyEmbedCode(code).then((ok) => {
+              copyStatus.textContent = ok ? ja.settings.embedCopied : ja.settings.embedCopyFailed;
+              copyStatus.classList.toggle('is-warn', !ok);
+            });
+          },
+        },
+        ja.settings.embedCopy,
+      ),
+      copyStatus,
+      code,
+    );
+
     // ---- このアプリについて（仕様書 第12節の免責文をそのまま） ----
     const about = h(
       'section',
@@ -151,10 +206,21 @@ export function mountSettings(app: App, root: HTMLElement): () => void {
       h('p', null, ja.settings.description),
       h('p', { class: 'disclaimer', 'data-testid': 'disclaimer' }, ja.settings.disclaimer),
       h('p', { class: 'muted small' }, ja.settings.privacy),
+      h('a', { class: 'btn ghost small', href: '#/welcome', 'data-testid': 'welcome-again' }, ja.settings.welcomeAgain),
       h('p', { class: 'muted small' }, ja.settings.version(__APP_VERSION__)),
     );
 
-    return h('main', { class: 'screen settings', 'data-testid': 'settings' }, topBar(ja.settings.title, true), status, fxGroup, display, data, about);
+    return h(
+      'main',
+      { class: 'screen settings', 'data-testid': 'settings' },
+      topBar(ja.settings.title, true),
+      status,
+      fxGroup,
+      display,
+      data,
+      app.embed ? null : embed,
+      about,
+    );
   };
 
   render();
