@@ -710,8 +710,10 @@ html.playing #app {
 
 .stat {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 12px;
+  align-items: baseline;
+  gap: 0 12px;
   border-bottom: 1px solid var(--line);
   padding-bottom: 6px;
 }
@@ -723,9 +725,13 @@ html.playing #app {
 
 .stat-label {
   color: var(--text-2);
+  white-space: nowrap;
 }
 
+/* 値が長いとき（「自己ベスト更新（+12）」など）は見出しを折り返さず、値だけ次の行の右端へ */
 .stat-value {
+  margin-left: auto;
+  text-align: right;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }

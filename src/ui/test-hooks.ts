@@ -30,6 +30,12 @@ export interface BfTestApi {
    */
   startFxAudit(): void;
   fxAuditReport(): FxAuditReport;
+  /**
+   * 受け入れ基準 12（60 fps を維持）の点検を始める: ラウンドの実行中（刺激・応答の画面）だけ、
+   * requestAnimationFrame の間隔を集める（ラウンド間の画面・結果画面は数えない）。
+   */
+  startFrameStats(): void;
+  frameStats(): FrameStats;
   /** 保存データ */
   save(): App['store']['data'];
   frameMs(): number;
@@ -43,6 +49,20 @@ export interface FxAuditReport {
   /** 正誤表示が出た回数と、任意の 1 秒間に出た回数の最大 */
   feedbackShown: number;
   maxFeedbackPerSecond: number;
+}
+
+export interface FrameStats {
+  /** 集めたフレーム間隔の数 */
+  frames: number;
+  /** 起動時に推定したフレーム間隔 (ms) */
+  frameMs: number;
+  /** 平均の間隔から求めた fps */
+  fps: number;
+  /** 間隔の 95 パーセンタイル・最大 (ms) */
+  p95Ms: number;
+  maxMs: number;
+  /** 1.5 フレームより長かった間隔（= 1 フレーム以上落ちた）の数 */
+  longFrames: number;
 }
 
 interface FxAuditState {
@@ -87,6 +107,7 @@ export function installTestHooks(app: App): void {
   let stop: (() => void) | null = null;
   let audit: FxAuditState | null = null;
   let stopAudit: (() => void) | null = null;
+  let frames: { deltas: number[]; last: number | null; on: boolean } | null = null;
 
   const api: BfTestApi = {
     version: 1,
@@ -192,6 +213,35 @@ export function installTestHooks(app: App): void {
         violations: [...a.violations],
         feedbackShown: a.feedbackOn.length,
         maxFeedbackPerSecond: maxPerSecond,
+      };
+    },
+    startFrameStats: () => {
+      if (frames) frames.on = false;
+      const st: { deltas: number[]; last: number | null; on: boolean } = { deltas: [], last: null, on: true };
+      frames = st;
+      const loop = (t: number): void => {
+        if (!st.on) return;
+        if (app.runners.current) {
+          if (st.last !== null) st.deltas.push(t - st.last);
+          st.last = t;
+        } else {
+          st.last = null;
+        }
+        requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
+    },
+    frameStats: () => {
+      const d = [...(frames?.deltas ?? [])].sort((a, b) => a - b);
+      const n = d.length;
+      const mean = n > 0 ? d.reduce((a, b) => a + b, 0) / n : 0;
+      return {
+        frames: n,
+        frameMs: app.frameMs,
+        fps: mean > 0 ? 1000 / mean : 0,
+        p95Ms: n > 0 ? (d[Math.min(n - 1, Math.floor(n * 0.95))] as number) : 0,
+        maxMs: n > 0 ? (d[n - 1] as number) : 0,
+        longFrames: d.filter((x) => x > app.frameMs * 1.5).length,
       };
     },
     save: () => app.store.data,

@@ -48,6 +48,20 @@ test('親ページのコードは第11節のもの（iframe・全画面で開く
 
 test('ブログ記事の iframe で埋め込み版が起動し、ナビを省いて「全画面で開く」と注意書きを出す', async ({ page, context }, testInfo) => {
   const errors = collectErrors(page);
+  // 音の準備（AudioContext）がいつ作られるかを数える（仕様書 9.4: 埋め込み時は最初のタップまで音を出さない）
+  await context.addInitScript(() => {
+    const w = window as unknown as { __bfAudioContexts: number };
+    w.__bfAudioContexts = 0;
+    const Orig = window.AudioContext;
+    if (Orig) {
+      window.AudioContext = class extends Orig {
+        constructor(...args: ConstructorParameters<typeof AudioContext>) {
+          super(...args);
+          w.__bfAudioContexts += 1;
+        }
+      };
+    }
+  });
   await routeHosts(context, testInfo.project.use.baseURL as string);
   await page.goto(BLOG);
   await expect(page.locator('a', { hasText: '全画面で開く' })).toHaveAttribute('href', APP);
@@ -56,7 +70,12 @@ test('ブログ記事の iframe で埋め込み版が起動し、ナビを省い
   // iframe の中の保存領域は本体と別なので、初回の案内（3 画面）から始まる
   await expect(frame.getByTestId('welcome')).toBeVisible();
   await expect(frame.getByTestId('welcome')).toContainText(NOTE);
+  const inner = await embedFrame(page);
+  const audioContexts = (): Promise<number> => inner.evaluate(() => (window as unknown as { __bfAudioContexts: number }).__bfAudioContexts);
+  await page.waitForTimeout(500);
+  expect(await audioContexts(), '最初のタップの前').toBe(0);
   await frame.getByTestId('welcome-next').click();
+  expect(await audioContexts(), '最初のタップの後').toBe(1);
   await frame.getByTestId('welcome-next').click();
   await frame.getByTestId('welcome-start').click();
 

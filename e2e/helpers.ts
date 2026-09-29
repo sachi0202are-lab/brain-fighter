@@ -76,6 +76,14 @@ export interface FxAuditReport {
   feedbackShown: number;
   maxFeedbackPerSecond: number;
 }
+export interface FrameStats {
+  frames: number;
+  frameMs: number;
+  fps: number;
+  p95Ms: number;
+  maxMs: number;
+  longFrames: number;
+}
 interface BfTest {
   autoplay(opts?: { delayMs?: number; correct?: (i: number) => boolean }): void;
   stopAutoplay(): void;
@@ -86,6 +94,8 @@ interface BfTest {
   };
   startFxAudit(): void;
   fxAuditReport(): FxAuditReport;
+  startFrameStats(): void;
+  frameStats(): FrameStats;
   logs(): BfTestLogRound[];
   save(): BfSave;
   frameMs(): number;
@@ -106,11 +116,28 @@ export function collectErrors(page: Page): string[] {
   return errors;
 }
 
+/** 難度・補助・スキップを選ぶ語（受け入れ基準 2。仕様書 4.2 の「実装しない」もの） */
+export const DIFFICULTY_WORDS = /難易度|難度を選|難度選択|かんたん|簡単モード|スキップ|ヒント|補助|スロー/;
+
+/**
+ * 受け入れ基準 2: いま表示中の画面に、難度・補助・スキップを選ぶ操作が無い
+ * （語が無い・select / 数値入力 / スライダーが無い・ラジオボタンは演出プリセットだけ）。
+ */
+export async function expectNoDifficultyControls(page: Page, where: string): Promise<void> {
+  const text = await page.locator('body').innerText();
+  expect(text, where).not.toMatch(DIFFICULTY_WORDS);
+  expect(await page.locator('select').count(), where).toBe(0);
+  expect(await page.locator('input[type="range"], input[type="number"]').count(), where).toBe(0);
+  const radios = await page.locator('input[type="radio"]').evaluateAll((els) => els.map((e) => (e as HTMLInputElement).name));
+  expect(radios.every((n) => n === 'fx' || n === 'welcome-fx'), where).toBe(true);
+}
+
 /**
  * 開始前の画面で「スタート」を押し、試合が終わって結果画面が出るまで進める。
  * ラウンド間は「次のラウンドへ」で飛ばし、「もう1ラウンド」は選ばない。応答は autoplay が入れる。
+ * onIntermission はラウンド間の画面（と「もう1ラウンド」の確認）が出るたびに、閉じる前に呼ばれる。
  */
-export async function playMatch(page: Page): Promise<void> {
+export async function playMatch(page: Page, opts: { onIntermission?: () => Promise<void> } = {}): Promise<void> {
   await page.getByTestId('start').click();
   const next = page.getByTestId('next-round');
   const toResult = page.getByTestId('to-result');
@@ -120,10 +147,13 @@ export async function playMatch(page: Page): Promise<void> {
     await any.first().waitFor({ state: 'visible', timeout: 180_000 });
     if (await result.isVisible()) return;
     if (await toResult.isVisible()) {
+      await opts.onIntermission?.();
       await toResult.click();
       continue;
     }
     if (await next.isVisible()) {
+      // ラウンド間の画面は 10 秒で閉じるが、調べるのは出た直後（閉じたあとでもゲーム画面を調べるだけで結果は同じ）
+      await opts.onIntermission?.();
       await next.click().catch(() => {
         /* 10 秒で自動的に閉じた直後 */
       });

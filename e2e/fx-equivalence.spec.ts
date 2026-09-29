@@ -44,5 +44,12 @@ for (const gameId of ['double-hit', 'combo-recall', 'stance-change']) {
       expect(r.frameMs, `${r.fx} のフレーム間隔`).toBeCloseTo(off!.frameMs, 6);
       expect(normalize(r.logs), `${r.fx} と off の試行ログ`).toEqual(normalize(off!.logs));
     }
+    // 照合した量（受け入れ基準 1 の根拠として残す）
+    const trials = off!.logs.flatMap((r) => r.trials);
+    const phases = trials.reduce((a, t) => a + Object.keys(t.plan).length, 0);
+    const stimMs = trials.map((t) => t.plan.stimulus ?? 0);
+    const description = `${gameId}: off / light / full で ${off!.logs.length} ラウンド・${trials.length} 試行・${phases} フェーズの予定時間（提示時間 ${Math.min(...stimMs).toFixed(1)}〜${Math.max(...stimMs).toFixed(1)} ms を含む）・刺激・正誤・難度・戦闘力が一致（フレーム ${off!.frameMs.toFixed(2)} ms）`;
+    testInfo.annotations.push({ type: 'fx-equivalence', description });
+    console.log(`[fx-equivalence] ${description}`);
   });
 }

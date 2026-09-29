@@ -347,16 +347,9 @@ function stimulusSignature(game: GameModule<Params, unknown>, untrained: boolean
 }
 
 describe('未訓練の刺激セット（受け入れ基準 6「訓練とは別の刺激セット」）', () => {
-  for (const id of GAME_IDS) {
+  // フェーズ1のスタブの間は it.todo にしていたが、3 本とも本実装で未訓練セットを持つので常に確かめる
+  it.each(GAME_IDS)('%s: 認定戦の刺激は訓練と見た目が違う（同じ試行列・同じ難度でも描画が変わる）', (id) => {
     const game = GAMES[id] as GameModule<Params, unknown>;
-    const differs = stimulusSignature(game, false) !== stimulusSignature(game, true);
-    if (differs) {
-      it(`${id}: 認定戦の刺激は訓練と見た目が違う`, () => {
-        expect(stimulusSignature(game, false)).not.toBe(stimulusSignature(game, true));
-      });
-    } else {
-      // フェーズ1のスタブは未訓練セットを持たない。本実装（フェーズ2）で見た目が変われば自動的に通常のテストになる
-      it.todo(`${id}: 認定戦の未訓練セットの見た目が訓練と同じ（ゲームの本実装で確認）`);
-    }
-  }
+    expect(stimulusSignature(game, true)).not.toBe(stimulusSignature(game, false));
+  });
 });

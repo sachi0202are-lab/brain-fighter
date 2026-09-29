@@ -26,7 +26,9 @@ export default defineConfig({
   timeout: 6 * 60_000,
   expect: { timeout: 15_000 },
   fullyParallel: true,
-  workers: process.env.CI ? 2 : 3,
+  // 長い試合を通すテストが多く、提示時間の照合（±1 フレーム）は負荷に弱いので同時に 2 本まで。
+  // 一番正確に測るときは --workers=1。ほかの E2E（別ポート）と同時に走らせない。
+  workers: 2,
   retries: 0,
   reporter: [['list']],
   outputDir: `test-results/${PORT}`,

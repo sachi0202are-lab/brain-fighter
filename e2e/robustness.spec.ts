@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { collectErrors, saveData, seedSave } from './helpers';
+import { collectErrors, expectNoDifficultyControls, saveData, seedSave } from './helpers';
 
 test('localStorage が使えない環境でも起動し、設定画面で知らせる（受け入れ基準 5）', async ({ page }) => {
   const errors = collectErrors(page);
@@ -37,14 +37,23 @@ test('難度・補助・スキップを選ぶ操作が無い（受け入れ基�
   for (const [url, testid] of screens) {
     await page.goto(url);
     await expect(page.getByTestId(testid)).toBeVisible();
-    const text = await page.locator('body').innerText();
-    expect(text, url).not.toMatch(/難易度|難度を選|難度選択|かんたん|簡単モード|スキップ|ヒント|補助|スロー/);
-    expect(await page.locator('select').count(), url).toBe(0);
-    expect(await page.locator('input[type="range"], input[type="number"]').count(), url).toBe(0);
-    // 選べるのは演出プリセットだけ（難度を選ぶラジオボタンは無い）
-    const radios = await page.locator('input[type="radio"]').evaluateAll((els) => els.map((e) => (e as HTMLInputElement).name));
-    expect(radios.every((n) => n === 'fx' || n === 'welcome-fx'), url).toBe(true);
+    // 語が無い・select / 数値入力 / スライダーが無い・選べるラジオボタンは演出プリセットだけ
+    await expectNoDifficultyControls(page, url);
   }
+  // 初回の案内の 3 画面（演出の選択を含む）
+  await page.goto('./?test=1&onboarding=1#/welcome');
+  for (let step = 1; step <= 3; step++) {
+    await expect(page.getByTestId('welcome')).toHaveAttribute('data-step', String(step));
+    await expectNoDifficultyControls(page, `初回の案内 ${step} / 3`);
+    if (step < 3) await page.getByTestId('welcome-next').click();
+  }
+  // ゲームの画面（ラウンド中）: 応答ボタンと中断だけ（ラウンド間・結果画面はスモークテストで調べる）
+  await page.goto('./?test=1#/play/stance-change');
+  await page.getByTestId('start').click();
+  await expect.poll(() => page.evaluate(() => window.__bfTest.state().running)).toBe(true);
+  await expectNoDifficultyControls(page, 'ゲーム画面（ラウンド中）');
+  const buttons = await page.locator('button:visible').evaluateAll((els) => els.map((e) => e.className));
+  expect(buttons.every((c) => /resp-btn|quit/.test(c)), buttons.join(' ')).toBe(true);
 });
 
 test('設定の「このアプリについて」に免責文がそのまま出る', async ({ page }) => {
