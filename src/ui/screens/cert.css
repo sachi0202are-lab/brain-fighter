@@ -96,3 +96,22 @@
   color: var(--ok);
   font-weight: 700;
 }
+
+/* 記録画面: いまのベルト */
+.belts-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+
+.belts-row:last-child {
+  border-bottom: 0;
+}
+
+.belts-total {
+  font-weight: 700;
+}

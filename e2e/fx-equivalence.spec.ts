@@ -20,7 +20,7 @@ function normalize(logs: BfTestLogRound[]): unknown {
   }));
 }
 
-for (const gameId of ['double-hit', 'stance-change']) {
+for (const gameId of ['double-hit', 'combo-recall', 'stance-change']) {
   test(`off / light / full で試行ログが一致する（${gameId}）`, async ({ browser }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'デスクトップのプロジェクトだけで実行する');
     test.setTimeout(15 * 60_000);

@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_FRAME_MS, frameQuantizer, quantizeMs, robustFrameInterval, snapFrameMs, VirtualScheduler } from './timing';
+import {
+  DEFAULT_FRAME_MS,
+  frameQuantizer,
+  MIN_PRESENTATION_MS,
+  quantizeMs,
+  robustFrameInterval,
+  snapFrameMs,
+  STANDARD_REFRESH_HZ,
+  VirtualScheduler,
+} from './timing';
 
 const F60 = 1000 / 60;
 const F120 = 1000 / 120;
@@ -18,6 +27,40 @@ describe('フレームへの量子化', () => {
   it('120Hz でも 33 ms は約 33 ms', () => {
     expect(quantizeMs(33, F120).frames).toBe(4);
     expect(quantizeMs(33, F120).ms).toBeCloseTo(33.333, 3);
+  });
+
+  it('下限側だけ切り上げ: どの標準リフレッシュレートでも 33 ms を下回らない（72/75/100/165Hz を含む）', () => {
+    const expected: Record<number, number> = { 48: 2, 50: 2, 60: 2, 72: 3, 75: 3, 90: 3, 100: 4, 120: 4, 144: 5, 165: 6, 240: 8 };
+    for (const hz of STANDARD_REFRESH_HZ) {
+      const f = 1000 / hz;
+      const q = quantizeMs(MIN_PRESENTATION_MS, f);
+      expect(q.frames, `${hz}Hz`).toBe(expected[hz]);
+      expect(q.ms, `${hz}Hz`).toBeGreaterThanOrEqual(MIN_PRESENTATION_MS);
+      expect(q.ms, `${hz}Hz`).toBeLessThan(MIN_PRESENTATION_MS + f);
+    }
+    // 33 ms 未満を求めたら、その ms を下回らない
+    expect(quantizeMs(16, F60).frames).toBe(1);
+    expect(quantizeMs(17, F60).frames).toBe(2);
+    expect(quantizeMs(20, 1000 / 75).frames).toBe(2);
+  });
+
+  it('33 ms より長い要求は今までどおり四捨五入（33 ms は下回らない）', () => {
+    expect(quantizeMs(41.25, F60).frames).toBe(2); // 2.475 → 2（33.3 ms）
+    expect(quantizeMs(42, F60).frames).toBe(3);
+    expect(quantizeMs(37, F120).frames).toBe(4);
+    expect(quantizeMs(1620, F60).frames).toBe(97);
+    expect(quantizeMs(34, 1000 / 75).frames).toBe(3); // 四捨五入でも 3（40 ms）
+    expect(quantizeMs(33.3, 1000 / 75).frames).toBe(3); // 四捨五入なら 2（26.7 ms）だが 33 ms を下回らない
+  });
+
+  it('量子化した値をもう一度量子化しても変わらない（すべての標準レート）', () => {
+    for (const hz of STANDARD_REFRESH_HZ) {
+      const f = 1000 / hz;
+      for (const ms of [1, 16, 20, 33, 34, 37.2, 41.25, 100, 120.5, 300, 1458]) {
+        const q = quantizeMs(ms, f);
+        expect(quantizeMs(q.ms, f).frames, `${hz}Hz ${ms}ms`).toBe(q.frames);
+      }
+    }
   });
 
   it('frameQuantizer は階段法の quantize フックに使える', () => {

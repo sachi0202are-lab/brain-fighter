@@ -93,6 +93,7 @@ export const common = {
     empty: 'まだ記録がありません。今日のセッションを遊ぶと、ここにグラフが出ます。',
     beltEmpty: 'まだ認定戦の記録がありません。',
     beltNote: 'ベルトは認定戦に合格すると上がり、下がることはありません。',
+    beltsNow: 'いまのベルト',
     certHistory: '認定戦の記録',
     certHistoryEmpty: 'まだ認定戦を受けていません。',
     rounds: (n: number): string => `訓練ラウンド ${n} 本`,

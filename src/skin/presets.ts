@@ -30,3 +30,10 @@ export const SKIN_FEATURES: Readonly<Record<FxPreset, SkinFeatures>> = {
 
 /** 1 ビットフィードバックの表示時間の上限 (ms)。仕様書 4.5「300ms 以内」 */
 export const FEEDBACK_MS = 250;
+
+/**
+ * 正誤音を鳴らすのに要る「次の刺激までの残り時間」(ms)。音の長さ（約 100 ms）＋余裕。
+ * これより短いとき（例: コンボ・リコールで押さなかった試行は、次の点灯と同じフレームで判定される）は鳴らさない
+ * （仕様書 4.5: フィードバックは次の刺激が出る前に消える）。
+ */
+export const FEEDBACK_SOUND_MIN_MS = 120;

@@ -3,6 +3,7 @@
  *
  * ラウンド実行のイベントを購読するだけで、進行には関われない（EventSource は購読専用）。
  * - 1 ビットフィードバックは刺激領域の外（上帯）に、最大 250ms、次の刺激の前に必ず消す。
+ *   正誤音も、次の刺激までに鳴り終わらない（残り 120 ms 未満の）ときは鳴らさない。
  * - HP バーは静的（アニメーションしない）。低 HP の点滅・警報音は実装しない（MUST NOT）。
  */
 import type { EventSource } from '../engine/events';
@@ -10,7 +11,7 @@ import type { RoundEvent } from '../engine/round';
 import type { FxPreset } from '../storage/schema';
 import { ja } from '../i18n/ja';
 import { hpState } from './hp';
-import { FEEDBACK_MS, SKIN_FEATURES, type SkinFeatures } from './presets';
+import { FEEDBACK_MS, FEEDBACK_SOUND_MIN_MS, SKIN_FEATURES, type SkinFeatures } from './presets';
 import type { SoundPlayer } from './sound';
 
 export interface HudOptions {
@@ -110,7 +111,7 @@ export class Hud {
         else errors += 1;
         renderHp();
         this.showFeedback(e.correct, Math.min(FEEDBACK_MS, e.feedbackMaxMs - 20));
-        this.sound?.play(e.correct);
+        if (e.feedbackMaxMs >= FEEDBACK_SOUND_MIN_MS) this.sound?.play(e.correct);
         this.updateCombo(e.correct, e.combo);
       }),
     ];

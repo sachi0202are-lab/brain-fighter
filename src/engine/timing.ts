@@ -2,6 +2,7 @@
  * requestAnimationFrame ベースの提示タイミング。
  *
  * - ミリ秒指定はフレーム数に量子化する（quantizeMs）。量子化後の値を「予定時間」として記録する。
+ *   基本は四捨五入で、下限側（33 ms 以下）だけ要求 ms を下回らないように切り上げる。
  * - 実際の提示開始・終了時刻は rAF のタイムスタンプ（performance.now() と同じ時間軸）で記録する。
  * - フレーム間隔は起動時に実測し、標準的なリフレッシュレート（60/120Hz など）に丸める。
  *   丸めることで、同じ端末なら毎回同じ量子化結果になる（演出プリセット間のログ照合が一致する）。
@@ -35,10 +36,26 @@ export interface Quantized {
   ms: number;
 }
 
-/** ms をフレーム数に丸める。0 以下は 0 フレーム、正の値は最低 1 フレーム */
+/**
+ * 短い提示の下限 (ms)（仕様書 6.1: 提示時間は 33 ms から = 60Hz の 2 フレーム）。
+ * 四捨五入だけだと 72/75/100/165Hz で 33 ms が 27〜30 ms で提示されてしまうので、この下限の側だけ切り上げる。
+ */
+export const MIN_PRESENTATION_MS = 33;
+
+/** 浮動小数の誤差（例: 2 フレーム = 33.333… ms を渡し直す）で切り上げが1フレーム増えないための余裕（フレーム単位） */
+const CEIL_EPS = 1e-6;
+
+/**
+ * ms をフレーム数に丸める。0 以下は 0 フレーム（そのフェーズは飛ばす）、正の値は最低 1 フレーム。
+ * 基本は四捨五入。ただし下限側だけは切り上げて要求を下回らない:
+ * 33 ms 未満を求めたらその ms を、33 ms 以上を求めたら 33 ms を下回らない最小のフレーム数より短くしない。
+ * （33 ms より長い要求は今までどおり四捨五入なので、例えば 60Hz の 41.25 ms は 2 フレーム = 33.3 ms）
+ */
 export function quantizeMs(ms: number, frameMs: number): Quantized {
   if (!(ms > 0)) return { frames: 0, ms: 0 };
-  const frames = Math.max(1, Math.round(ms / frameMs));
+  const nearest = Math.round(ms / frameMs);
+  const lowerGuard = Math.ceil(Math.min(ms, MIN_PRESENTATION_MS) / frameMs - CEIL_EPS);
+  const frames = Math.max(1, nearest, lowerGuard);
   return { frames, ms: frames * frameMs };
 }
 

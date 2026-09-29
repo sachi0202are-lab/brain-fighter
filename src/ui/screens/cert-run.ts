@@ -109,7 +109,7 @@ export function mountCertRun(app: App, root: HTMLElement, ids: readonly string[]
           'div',
           { class: 'actions' },
           h('a', { class: 'btn primary block', href: '#/', 'data-testid': 'to-home' }, ja.result.home),
-          app.embed ? null : h('a', { class: 'btn block', href: '#/records', 'data-testid': 'to-records' }, ja.result.records),
+          h('a', { class: 'btn block', href: '#/records', 'data-testid': 'to-records' }, ja.result.records),
         ),
       ),
     );

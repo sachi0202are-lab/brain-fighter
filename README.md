@@ -24,6 +24,7 @@ Node 22 / npm。
 | `npm run icons` | プレースホルダーのアイコン（`public/icons/`）を作り直す |
 
 E2E のポートを変えるとき: `PORT=4174 npm run test:e2e`（ビルド出力は `.e2e-dist/<PORT>/`、結果は `test-results/<PORT>/` に分かれるので、並行して走らせてもぶつからない）。
+ほかの E2E と同時に回すと、負荷で提示時間の照合（±1 フレーム）が落ちることがある。そのときは `PORT=4177 npm run test:e2e -- --workers=1`（または 2）で。
 Playwright 同梱のブラウザが無い環境では `/opt/pw-browsers/chromium`（または環境変数 `PW_CHROMIUM_PATH`）を使う。
 
 ### URL パラメータ

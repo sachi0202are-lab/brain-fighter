@@ -87,6 +87,10 @@ test('条件を満たしたゲームだけ挑める。全問正解で合格し�
   // 記録: 認定戦の記録とベルトのグラフ（戦闘力とは別）
   await page.goto('./?test=1#/records');
   await expect(page.locator('[data-testid="cert-history"] li[data-passed="true"]')).toHaveCount(1);
+  // いまのベルト: ゲームごとと総合（3本の最低値）
+  await expect(page.locator('[data-testid="belts-now"] .belts-row[data-game="double-hit"] .belt-chip')).toHaveAttribute('data-belt', '1');
+  await expect(page.locator('[data-testid="belts-now"] .belts-row[data-game="combo-recall"] .belt-chip')).toHaveAttribute('data-belt', '2');
+  await expect(page.locator('[data-testid="belts-now"] .belts-total .belt-chip')).toHaveAttribute('data-belt', '0');
   await expect(page.locator('.chart-svg')).toHaveCount(1); // ベルトだけ（訓練の記録は無い）
   expect(errors).toEqual([]);
 });

@@ -8,12 +8,12 @@ import { allTrainingDays, WEEK_GOAL_DAYS, weekTrainingDays } from '../../engine/
 import { beltName, gameText, ja } from '../../i18n/ja';
 import { GAME_COLORS, TOTAL_COLOR } from '../../skin/palette';
 import { GAME_IDS } from '../../storage/schema';
-import { beltHistory, dailyGameSeries, dailyTotalSeries, roundAccuracySeries, trainingRounds } from '../../storage/selectors';
+import { beltHistory, dailyGameSeries, dailyTotalSeries, roundAccuracySeries, totalBelt, trainingRounds } from '../../storage/selectors';
 import type { App } from '../app';
 import { chart, niceTicks, type ChartSeries } from '../charts';
 import { h } from '../dom';
 import { fmtDate, fmtInt, fmtMonthDay, fmtPct } from '../format';
-import { topBar } from './home';
+import { beltChip, topBar } from './home';
 import './cert.css';
 
 const dateX = (x: number): string => fmtMonthDay(fromDayNumber(x));
@@ -86,7 +86,16 @@ export function mountRecords(app: App, root: HTMLElement): () => void {
     ),
   );
 
-  // 3. ベルト（認定戦の結果。戦闘力とは別のグラフ）
+  // 3. ベルト（認定戦の結果。戦闘力とは別のグラフ）。いまのベルト（総合 = 3本の最低値）を先に
+  main.append(
+    h(
+      'section',
+      { class: 'card belts-now', 'data-testid': 'belts-now' },
+      h('h2', { class: 'card-title' }, ja.records.beltsNow),
+      h('div', { class: 'belts-row belts-total' }, h('span', null, ja.home.totalBelt), beltChip(totalBelt(d))),
+      ...GAME_IDS.map((g) => h('div', { class: 'belts-row', 'data-game': g }, h('span', null, gameText(g).name), beltChip(d.games[g].belt))),
+    ),
+  );
   main.append(
     add(
       chart({
