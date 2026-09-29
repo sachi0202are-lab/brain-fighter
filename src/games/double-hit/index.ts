@@ -1,153 +1,146 @@
 /**
- * ダブルヒット — フェーズ1のスタブ（仮実装）。
+ * ダブルヒット（仕様書 6.1。UFOV 型の処理速度・分割注意）。
  *
- * フェーズ2で仕様書 6.1（UFOV 型: 中央の構え＋周辺の火花＋妨害、24 試行、ステージ 0〜4）に置き換える。
- * いまはエンジンの次の経路を通すための最小限の中身:
- *   - 複合応答（形グループ＋位置グループの両方がそろって判定）
- *   - 試行単位の重み付き階段法（提示時間 T: 正答 ×0.93 / 誤答 ×1.25、33〜500 ms、フレーム量子化はエンジン）
- *   - ラウンド単位のステージ昇格（T が下限かつ正答率 80% 以上）
- *   - 刺激領域のタップ（hitTest）
+ * 1試行: 注視点 500 ms → 刺激 T ms（中央の構え＋周辺の火花＋妨害）→ マスク 150 ms
+ *        → 応答（構えと火花の方向。順番は自由、5 秒まで）→ フィードバック 300 ms → 試行間隔 500 ms。
+ * 両方正解で正答。片方だけ正解は誤答（内訳 kind: stance / dir / both / timeout）。
+ * 適応: 試行単位の重み付き階段法（T）＋ラウンド末のステージ昇格（params.ts）。1ラウンド 24 試行、1試合 3 ラウンド。
+ *
+ * 部品: params.ts（難度・適応・戦闘力・認定戦）、trials.ts（試行列・判定）、layout.ts（応答ボタン・キー・タップ）、
+ *       render.ts（描画）。
  */
-import { doubleHitPower } from '../../engine/power';
-import { mulberry32 } from '../../engine/rng';
-import { balancedSequence } from '../../engine/sequence';
-import { weightedStep, type WeightedStaircaseConfig } from '../../engine/staircase';
 import { median } from '../../engine/stats';
-import type { GameModule, PhaseSpec, ResponseLayout } from '../../engine/types';
+import type { GameModule, PhaseSpec, RoundSummary } from '../../engine/types';
 import { doubleHitText as text } from '../../i18n/ja/double-hit';
+import { DIR_GROUP, STANCE_GROUP, dirAt, layoutFor } from './layout';
+import {
+  INITIAL_PARAMS,
+  afterRound,
+  afterTrial,
+  certDhParams,
+  clampT,
+  dhEnemyLevel,
+  dhPower,
+  presentedT,
+  restoreDhParams,
+  type DhParams,
+} from './params';
+import { renderTrial, SURFACES } from './render';
+import { ERROR_KINDS, createTrials, describeTrial, expectedResponse, judgeTrial, type DhTrial } from './trials';
 
-export type DhParams = { T: number; stage: number };
-export type DhShape = 'circle' | 'square';
-export type DhSide = 'left' | 'right';
-export interface DhTrial {
-  shape: DhShape;
-  side: DhSide;
-  /** マスク模様の種（描画で乱数を使わないため試行データに入れておく） */
-  maskSeed: number;
+export type { DhParams } from './params';
+export type { DhTrial } from './trials';
+
+/** フェーズの長さ (ms)（仕様書 6.1。刺激だけが T で変わる） */
+export const PHASE_MS = {
+  fixation: 500,
+  mask: 150,
+  /** 応答の制限時間 */
+  response: 5000,
+  feedback: 300,
+  iti: 500,
+} as const;
+
+export function trialPhases(T: number): PhaseSpec[] {
+  return [
+    { name: 'fixation', ms: PHASE_MS.fixation },
+    { name: 'stimulus', ms: clampT(T) },
+    { name: 'mask', ms: PHASE_MS.mask },
+    { name: 'response', ms: PHASE_MS.response, input: true, untilResponse: true },
+    { name: 'feedback', ms: PHASE_MS.feedback },
+    { name: 'iti', ms: PHASE_MS.iti },
+  ];
 }
 
-/** スタブの試行数（本番は 24） */
-const TRIALS_PER_ROUND = 6;
-export const T_STAIRCASE: WeightedStaircaseConfig = { onCorrect: 0.93, onError: 1.25, min: 33, max: 500 };
-const CERT_T = [400, 300, 220, 160, 120, 90, 67, 50, 33];
-const MAX_STAGE = 4;
+const r1 = (v: number): number => Math.round(v * 10) / 10;
+const r3 = (v: number): number => Math.round(v * 1000) / 1000;
 
-const layout: ResponseLayout = {
-  columns: 2,
-  rows: 2,
-  buttons: [
-    { id: 'circle', group: 'shape', label: text.buttons.circle, keys: ['q', 'KeyQ'], col: 1, row: 1 },
-    { id: 'square', group: 'shape', label: text.buttons.square, keys: ['a', 'KeyA'], col: 2, row: 1 },
-    { id: 'left', group: 'side', label: text.buttons.left, keys: ['ArrowLeft'], col: 1, row: 2 },
-    { id: 'right', group: 'side', label: text.buttons.right, keys: ['ArrowRight'], col: 2, row: 2 },
-  ],
-};
+/**
+ * ラウンドの記録（仕様書 6.1「記録」）。T は実際の提示値（フレームに丸めた値）。
+ * - tEnd: ラウンド末の T（次の試行に使う値を丸めたもの）
+ * - tMedian: ラウンド内の各試行の提示時間（丸めた値）の中央値
+ * - accStance / accDir / accBoth: 構え・火花の方向・両方の正答率（0〜1）
+ * - stage: そのラウンドのステージ
+ */
+export function roundMetrics(round: RoundSummary<DhParams, DhTrial>): Record<string, number> {
+  const n = round.results.length;
+  const presented = round.results.map((r) => {
+    const stim = r.phases.find((p) => p.name === 'stimulus');
+    return stim ? stim.plannedMs : presentedT(r.params.T, round.frameMs);
+  });
+  let stanceOk = 0;
+  let dirOk = 0;
+  for (const r of round.results) {
+    if (r.response?.[STANCE_GROUP] === r.trial.stance) stanceOk += 1;
+    if (r.response?.[DIR_GROUP] === r.trial.dir) dirOk += 1;
+  }
+  const tEnd = presentedT(round.paramsPlayed.T, round.frameMs);
+  return {
+    tEnd: r1(tEnd),
+    tMedian: r1(median(presented) ?? tEnd),
+    accStance: n > 0 ? r3(stanceOk / n) : 0,
+    accDir: n > 0 ? r3(dirOk / n) : 0,
+    accBoth: n > 0 ? r3(round.correct / n) : 0,
+    stage: round.paramsPlayed.stage,
+  };
+}
 
-const SURFACE_COLORS = ['#f2f4ff', '#ffd166'];
-const UNTRAINED_COLOR = '#9ee6ff';
+/** ラウンド末の一言（誤りの内訳から、方略に向けた一言を選ぶ。能力ラベルは使わない） */
+export function roundTip(round: RoundSummary<DhParams, DhTrial>): string {
+  const e = round.errors;
+  const both = e[ERROR_KINDS.both] ?? 0;
+  const stanceErr = (e[ERROR_KINDS.stance] ?? 0) + both;
+  const dirErr = (e[ERROR_KINDS.dir] ?? 0) + both;
+  const timeout = e[ERROR_KINDS.timeout] ?? 0;
+  const p = round.paramsPlayed;
+  if (timeout >= 2) return text.tipTimeout;
+  if (stanceErr >= 2 && stanceErr > dirErr) return p.stances >= 3 ? text.tipStance3 : text.tipStance;
+  if (dirErr >= 2 && dirErr > stanceErr) return p.distractors > 0 ? text.tipDirDistractors : text.tipDir;
+  if (round.accuracy >= 0.85) return text.tipSteady;
+  const tips = text.tips;
+  return tips[(((round.roundNo - 1) % tips.length) + tips.length) % tips.length] as string;
+}
 
 export const game: GameModule<DhParams, DhTrial> = {
   id: 'double-hit',
-  initialParams: { T: 300, stage: 0 },
-  surfaceCount: 2,
+  initialParams: INITIAL_PARAMS,
+  surfaceCount: SURFACES.length,
 
-  createRound(_params, rng) {
-    const shapes = balancedSequence<DhShape>(rng, TRIALS_PER_ROUND, ['circle', 'square'], 3);
-    const sides = balancedSequence<DhSide>(rng, TRIALS_PER_ROUND, ['left', 'right'], 2);
-    return shapes.map((shape, i) => ({ shape, side: sides[i] as DhSide, maskSeed: rng.int(0, 2 ** 31) }));
-  },
+  restoreParams: restoreDhParams,
 
-  phases(_trial, params): PhaseSpec[] {
-    return [
-      { name: 'fixation', ms: 300 },
-      { name: 'stimulus', ms: params.T },
-      { name: 'mask', ms: 100 },
-      { name: 'response', ms: 3000, input: true, untilResponse: true },
-      { name: 'feedback', ms: 250 },
-      { name: 'iti', ms: 300 },
-    ];
-  },
+  createRound: (params, rng) => createTrials(params, rng),
 
-  responseLayout: () => layout,
+  phases: (_trial, params) => trialPhases(params.T),
+
+  responseLayout: (params) => layoutFor(params.stances),
 
   renderStimulus(ctx, trial, phase, _t, view) {
-    const s = view.size;
-    const c = s / 2;
-    if (phase === 'fixation') {
-      ctx.strokeStyle = '#c9cfe8';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(c - s * 0.03, c);
-      ctx.lineTo(c + s * 0.03, c);
-      ctx.moveTo(c, c - s * 0.03);
-      ctx.lineTo(c, c + s * 0.03);
-      ctx.stroke();
-    } else if (phase === 'stimulus') {
-      const x = trial.side === 'left' ? c - s * 0.25 : c + s * 0.25;
-      const r = s * 0.08;
-      ctx.fillStyle = view.untrained ? UNTRAINED_COLOR : (SURFACE_COLORS[view.surface % SURFACE_COLORS.length] as string);
-      ctx.beginPath();
-      if (trial.shape === 'circle') ctx.arc(x, c, r, 0, Math.PI * 2);
-      else ctx.rect(x - r, c - r, r * 2, r * 2);
-      ctx.fill();
-    } else if (phase === 'mask') {
-      const rnd = mulberry32(trial.maskSeed);
-      const n = 12;
-      const cell = s / n;
-      for (let i = 0; i < n; i++) {
-        for (let j = 0; j < n; j++) {
-          const g = Math.floor(40 + rnd.next() * 140);
-          ctx.fillStyle = `rgb(${g},${g},${g})`;
-          ctx.fillRect(i * cell, j * cell, cell + 0.5, cell + 0.5);
-        }
-      }
-    } else if (phase === 'response') {
-      ctx.fillStyle = '#858daa';
-      ctx.font = `${Math.round(s * 0.1)}px system-ui, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('?', c, c);
-    }
+    renderTrial(ctx, trial, phase, view);
   },
 
-  hitTest(_trial, phase, x, _y, view) {
-    if (phase !== 'response') return null;
-    return x < view.size / 2 ? 'left' : 'right';
+  hitTest(_trial, phase, x, y, view) {
+    return phase === 'response' ? dirAt(x, y, view.size) : null;
   },
 
-  judge(trial, response) {
-    if (!response || response.shape === undefined || response.side === undefined) return { correct: false, kind: 'timeout' };
-    const shapeOk = response.shape === trial.shape;
-    const sideOk = response.side === trial.side;
-    if (shapeOk && sideOk) return { correct: true };
-    return { correct: false, kind: !shapeOk && !sideOk ? 'both' : !shapeOk ? 'shape' : 'side' };
-  },
+  judge: judgeTrial,
 
-  expectedResponse: (trial) => ({ shape: trial.shape, side: trial.side }),
+  expectedResponse,
 
-  describeTrial: (trial) => `${trial.shape}/${trial.side}`,
+  describeTrial,
 
-  adaptTrial(params, correct) {
-    return { ...params, T: weightedStep(params.T, correct, T_STAIRCASE).value };
-  },
+  adaptTrial: (params, correct) => afterTrial(params, correct),
 
-  adapt(params, round) {
-    if (params.T <= T_STAIRCASE.min + 1e-6 && round.accuracy + 1e-9 >= 0.8 && params.stage < MAX_STAGE) {
-      return { stage: params.stage + 1, T: 100 };
-    }
-    return params;
-  },
+  adapt: (params, round) => afterRound(params, round.accuracy, round.frameMs),
 
-  power: (params) => doubleHitPower(params.stage, params.T),
+  power: (params) => dhPower(params),
 
-  certParams: (tier) => ({ T: CERT_T[Math.min(9, Math.max(1, tier)) - 1] as number, stage: 0 }),
+  certParams: certDhParams,
 
-  enemyLevel: (params) => 1 + Math.floor(doubleHitPower(params.stage, params.T) / 100),
+  enemyLevel: dhEnemyLevel,
 
-  metrics(round) {
-    const ts = round.results.map((r) => r.params.T);
-    return { tEnd: round.paramsPlayed.T, tMedian: median(ts) ?? round.paramsPlayed.T, stage: round.paramsPlayed.stage };
-  },
+  metrics: (round) => roundMetrics(round),
 
-  roundTip: (round) => text.tips[(round.roundNo - 1 + text.tips.length) % text.tips.length] as string,
+  roundTip,
+
+  roundIntro: (params) => text.intro(params),
 };
