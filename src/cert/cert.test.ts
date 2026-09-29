@@ -10,7 +10,7 @@ import type { GameModule, Params, RoundOptions, RoundStats } from '../engine/typ
 import { GAMES } from '../games';
 import { defaultSaveData } from '../storage/storage';
 import { GAME_IDS, type SaveData } from '../storage/schema';
-import { fakeGame } from '../test/fake-game';
+import { fakeGame, type FakeParams } from '../test/fake-game';
 import {
   addCertRound,
   availableCertGames,
@@ -23,7 +23,7 @@ import {
   judgeCert,
   MAX_BELT,
 } from './cert';
-import { certParamsOf, runCert } from './runner';
+import { certParamsOf, certRoundIntro, runCert } from './runner';
 
 const at = (y: number, mo: number, d: number, h = 12): Date => new Date(y, mo - 1, d, h);
 const days = (...ds: number[]): string[] => ds.map((d) => `2026-09-${String(d).padStart(2, '0')}`);
@@ -272,6 +272,42 @@ describe.each(GAME_IDS)('登録ゲームの認定戦: %s', (id) => {
     expect(calls.rounds.every((r) => r.opts.untrained)).toBe(true);
     expect(calls.renderUntrained.every(Boolean)).toBe(true);
     expect(res.verdict.passed).toBe(true);
+  });
+});
+
+describe('ルールの一言（roundIntro）', () => {
+  it('認定戦では固定難度と untrained: true を渡す（roundIntro が無いゲームは何も出さない）', () => {
+    const base = fakeGame();
+    const calls: unknown[] = [];
+    const game = {
+      ...base,
+      roundIntro: (p: FakeParams, info: { kind: string; roundNo: number; untrained?: boolean }) => {
+        calls.push({ p: { ...p }, info: { ...info } });
+        return 'rule';
+      },
+    };
+    expect(certRoundIntro(game, 3, 2)).toBe('rule');
+    expect(calls).toEqual([{ p: base.certParams(3), info: { kind: 'round', roundNo: 2, untrained: true } }]);
+    expect(certRoundIntro(base, 3, 1)).toBeUndefined();
+  });
+
+  it.each(GAME_IDS)('%s: untrained: true を渡しても壊れない', (id) => {
+    const game = GAMES[id];
+    for (const tier of [1, 5, 9]) {
+      const t = certRoundIntro(game, tier, 1);
+      if (game.roundIntro) expect(typeof t === 'string' && t.length > 0, `tier ${tier}`).toBe(true);
+    }
+  });
+
+  it('スタンスチェンジは認定戦では未訓練セットの呼び名で説明する', () => {
+    const game = GAMES['stance-change'];
+    for (const tier of [1, 6]) {
+      const p = game.certParams(tier);
+      const trained = game.roundIntro?.(p, { kind: 'round', roundNo: 1 });
+      const untrained = game.roundIntro?.(p, { kind: 'round', roundNo: 1, untrained: true });
+      expect(untrained, `tier ${tier}`).toBeTruthy();
+      expect(untrained, `tier ${tier}`).not.toBe(trained);
+    }
   });
 });
 

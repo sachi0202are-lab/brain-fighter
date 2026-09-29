@@ -71,7 +71,7 @@ export function mountPlay(app: App, root: HTMLElement, gameId: string): () => vo
 
   /** 次のラウンドのルールの一言（ゲームが roundIntro を持つときだけ） */
   const introLine = (params: Params, info: { kind: RoundKind; roundNo: number }): HTMLElement | null => {
-    const t = game.roundIntro?.(params, info);
+    const t = game.roundIntro?.(params, { ...info, untrained: false });
     return t ? h('p', { class: 'intro', 'data-testid': 'round-intro' }, t) : null;
   };
 

@@ -9,7 +9,7 @@
  * - 結果は「合格／不合格」と正答率だけ。
  */
 import { accuracyOf, addCertRound, beginCert, CERT_ROUNDS, certStatus, finishCert } from '../../cert/cert';
-import { runCert } from '../../cert/runner';
+import { certRoundIntro, runCert } from '../../cert/runner';
 import { makeId } from '../../engine/ids';
 import { statsOf } from '../../engine/match';
 import { roundSeed } from '../../engine/rng';
@@ -38,6 +38,12 @@ interface CertOutcome {
 export function certQueue(app: App, ids: readonly string[], now: Date): GameId[] {
   const wanted = new Set(ids);
   return GAME_IDS.filter((g) => wanted.has(g) && getGame(g) !== undefined && certStatus(app.store.data.games[g], now).available);
+}
+
+/** ラウンドのルールの一言（認定戦の固定難度・未訓練セットで） */
+function introLine(game: AnyGameModule, tier: number, roundNo: number): HTMLElement | null {
+  const t = certRoundIntro(game, tier, roundNo);
+  return t ? h('p', { class: 'intro', 'data-testid': 'round-intro' }, t) : null;
 }
 
 function verdictText(o: { passed: boolean; rounds: readonly unknown[] }): string {
@@ -154,6 +160,7 @@ export function mountCertRun(app: App, root: HTMLElement, ids: readonly string[]
         h('h1', { class: 'panel-title' }, text.name),
         h('p', { class: 'cert-tier' }, tierText),
         ...text.howTo.map((line) => h('p', null, line)),
+        introLine(game, tier, 1),
         h('p', { class: 'key-line' }, text.keys),
         h('p', { class: 'muted small' }, ja.cert.minimalNote),
         h('p', { class: 'muted small' }, ja.cert.attemptNote),
@@ -200,6 +207,7 @@ export function mountCertRun(app: App, root: HTMLElement, ids: readonly string[]
               { class: 'panel', 'data-testid': 'intermission' },
               h('h2', null, ja.cert.roundEnd(next.roundNo - 1)),
               h('p', { class: 'muted' }, ja.cert.betweenNote),
+              introLine(game, tier, next.roundNo),
               bar,
               nextBtn,
             ),

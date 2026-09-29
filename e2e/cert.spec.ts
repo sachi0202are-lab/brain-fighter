@@ -129,6 +129,8 @@ test('1ラウンド目を始めたあとで中断すると「不合格（中断�
   await seedSave(page, saveData({ 'combo-recall': { days: 3 } }));
   await page.goto('./?test=1#/cert/run/combo-recall');
   await expect(page.getByTestId('cert-ready')).toBeVisible();
+  // ルールの一言（固定難度・未訓練セットで。コンボ・リコールは「何個前か」）
+  await expect(page.getByTestId('cert-ready').getByTestId('round-intro')).toBeVisible();
   // 開始前にやめるだけなら記録は残らない
   await page.getByTestId('cert-cancel').click();
   await expect(page.getByTestId('cert')).toBeVisible();
@@ -146,4 +148,28 @@ test('1ラウンド目を始めたあとで中断すると「不合格（中断�
   await expect(page.locator('.cert-item[data-game="combo-recall"]')).toContainText('から挑めます');
   await page.goto('./?test=1#/records');
   await expect(page.getByTestId('cert-history')).toContainText('不合格（中断）');
+});
+
+test('認定戦でも刺激領域のタップで答えられる（ダブルヒットの 8 方向。タップの判定にも審査のラウンドの情報が渡る）', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'デスクトップのプロジェクトだけで実行する');
+  const errors = collectErrors(page);
+  await seedSave(page, saveData({ 'double-hit': { days: 3 } }));
+  await page.goto('./?test=1#/cert/run/double-hit');
+  await page.getByTestId('start').click();
+  // 最初の試行の応答画面まで待ち、刺激領域の上の方（中心から半径の 6 割）をタップする
+  await page.waitForFunction(
+    () => {
+      const s = window.__bfTest.state().snapshot;
+      return s !== null && s.accepting && s.phase === 'response';
+    },
+    undefined,
+    { timeout: 60_000, polling: 'raf' },
+  );
+  const box = await page.getByTestId('stimulus').boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height * 0.2);
+  const snap = await page.evaluate(() => window.__bfTest.state().snapshot);
+  expect(snap?.i).toBe(0);
+  expect(Object.keys(snap?.selection ?? {})).toHaveLength(1);
+  expect(errors).toEqual([]);
 });

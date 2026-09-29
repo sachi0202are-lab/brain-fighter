@@ -79,7 +79,11 @@ export interface FxAuditReport {
 interface BfTest {
   autoplay(opts?: { delayMs?: number; correct?: (i: number) => boolean }): void;
   stopAutoplay(): void;
-  state(): { route: string; running: boolean; snapshot: { i: number; trials: number; phase: string } | null };
+  state(): {
+    route: string;
+    running: boolean;
+    snapshot: { i: number; trials: number; phase: string; accepting: boolean; selection: Record<string, string> } | null;
+  };
   startFxAudit(): void;
   fxAuditReport(): FxAuditReport;
   logs(): BfTestLogRound[];

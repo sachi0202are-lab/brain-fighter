@@ -276,8 +276,9 @@ export interface GameModule<P extends Params = Params, T = unknown> {
   /**
    * 次のラウンドのルールの一言（任意。例「2 個前と同じなら攻撃」）。
    * 開始前の画面と、ラウンド間の画面（次のラウンドの難度で）に出る。
+   * info.untrained は認定戦（未訓練の刺激セット）のラウンドのとき true（省略時は訓練）。
    */
-  roundIntro?(params: P, info: { kind: RoundKind; roundNo: number }): string;
+  roundIntro?(params: P, info: { kind: RoundKind; roundNo: number; untrained?: boolean }): string;
 }
 
 /** 型引数を問わないゲームモジュール（登録簿用） */

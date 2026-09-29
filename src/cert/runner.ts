@@ -48,6 +48,14 @@ export function certRoundOptions(roundNo: number): RoundOptions {
   return { untrained: true, surface: 0, roundNo, kind: 'round' };
 }
 
+/**
+ * 審査のラウンドのルールの一言（ゲームが roundIntro を持つときだけ）。
+ * 固定難度と `untrained: true` を渡す（未訓練セットの呼び名で説明するゲームがある）。
+ */
+export function certRoundIntro<P extends Params>(game: GameModule<P, unknown>, tier: number, roundNo: number): string | undefined {
+  return game.roundIntro?.(certParamsOf(game, tier), { kind: 'round', roundNo, untrained: true });
+}
+
 export async function runCert<P extends Params, T>(
   cfg: CertRunConfig<P, T>,
   hooks: CertRunHooks<P, T>,
