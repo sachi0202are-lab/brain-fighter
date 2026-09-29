@@ -253,6 +253,22 @@ describe('実行: 固定難度・未訓練の刺激セット・2 ラウンド（
   });
 });
 
+describe('審査のラウンド数は訓練の試合のラウンド数と別', () => {
+  it('スタンスチェンジは訓練 1 ラウンド（roundsPerMatch: 1）でも、審査は CERT_ROUNDS = 2 ラウンド', async () => {
+    const sc = GAMES['stance-change'];
+    expect(sc.roundsPerMatch).toBe(1);
+    expect(CERT_ROUNDS).toBe(2);
+    const { game, calls } = spy(sc);
+    const res = await certHeadless(game, 1, { plan: allCorrect, surface: nullSurface });
+    expect(res.rounds).toHaveLength(CERT_ROUNDS);
+    expect(res.rounds.map((r) => r.trials)).toEqual([30, 30]);
+    expect(calls.warmup).toBe(0);
+    expect(res.verdict).toEqual({ roundPassed: [true, true], passed: true });
+    // 1 ラウンドだけでは合格にならない（2 ラウンドとも必要）
+    expect(judgeCert(sc, 1, [{ trials: 30, correct: 30, accuracy: 1, errors: {} }]).passed).toBe(false);
+  });
+});
+
 describe.each(GAME_IDS)('登録ゲームの認定戦: %s', (id) => {
   const base = GAMES[id];
 

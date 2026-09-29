@@ -5,7 +5,7 @@
  * 実測まで含めた完全一致は Vitest の src/engine/fx-equivalence.test.ts（仮想時計）で確かめている。
  */
 import { expect, test } from '@playwright/test';
-import { playMatch, type BfTestLogRound } from './helpers';
+import { MATCH_ROUNDS, playMatch, type BfTestLogRound } from './helpers';
 
 const FX = ['off', 'light', 'full'] as const;
 
@@ -20,7 +20,7 @@ function normalize(logs: BfTestLogRound[]): unknown {
   }));
 }
 
-for (const gameId of ['double-hit', 'combo-recall', 'stance-change']) {
+for (const gameId of ['double-hit', 'combo-recall', 'stance-change'] as const) {
   test(`off / light / full で試行ログが一致する（${gameId}）`, async ({ browser }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'デスクトップのプロジェクトだけで実行する');
     test.setTimeout(15 * 60_000);
@@ -39,7 +39,11 @@ for (const gameId of ['double-hit', 'combo-recall', 'stance-change']) {
       }),
     );
     const [off, ...others] = runs;
-    expect(off!.logs.length).toBeGreaterThanOrEqual(3);
+    // 1 試合のラウンド（「もう1ラウンド」は選ばない）: ダブルヒット・コンボ・リコールは 3 本、
+    // スタンスチェンジは 1 本だけでウォームアップも無い（以前はウォームアップ 12 試行＋3 ラウンドの 4 本・102 試行）
+    const rounds = Array.from({ length: MATCH_ROUNDS[gameId] }, (_, k) => `round:${k + 1}`);
+    for (const r of runs) expect(r.logs.map((x) => `${x.kind}:${x.roundNo}`), `${r.fx} のラウンド`).toEqual(rounds);
+    if (gameId === 'stance-change') expect(off!.logs.map((x) => x.trials.length)).toEqual([30]);
     for (const r of others) {
       expect(r.frameMs, `${r.fx} のフレーム間隔`).toBeCloseTo(off!.frameMs, 6);
       expect(normalize(r.logs), `${r.fx} と off の試行ログ`).toEqual(normalize(off!.logs));

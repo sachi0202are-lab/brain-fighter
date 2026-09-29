@@ -21,7 +21,8 @@ export const common = {
     power: '戦闘力',
     totalBelt: '総合ベルト',
     startSession: '今日のセッション',
-    sessionNote: '3つのミニゲームを順番に1試合ずつ遊びます（約12〜15分）',
+    /** 所要時間の目安: ダブルヒット 約5分・コンボ・リコール 約4分・スタンスチェンジ 約1.5分（1 ラウンド） */
+    sessionNote: '3つのミニゲームを順番に1試合ずつ遊びます（約10分）',
     resumeSession: (game: string): string => `続きから（次は ${game}）`,
     sessionWait: (time: string): string => `次のセッションは ${time} から遊べます（同じ日の2回目は4時間あけます）`,
     sessionLimit: '今日のセッションは2回とも終わりました。また明日。',
@@ -33,7 +34,8 @@ export const common = {
   },
 
   play: {
-    round: (n: number, total: number): string => `ラウンド ${n}/${total}`,
+    /** 上帯と結果画面のラウンド。1 ラウンドだけの試合（スタンスチェンジ）は「ラウンド 1/1」ではなく「一本勝負」 */
+    round: (n: number, total: number): string => (total === 1 ? '一本勝負' : `ラウンド ${n}/${total}`),
     extraRound: 'もう1ラウンド',
     warmup: 'ウォームアップ',
     enemyLevel: (lv: number): string => `敵レベル ${lv}`,
@@ -68,6 +70,8 @@ export const common = {
   result: {
     title: '試合結果',
     roundsHeading: 'ラウンドごとの結果',
+    /** 1 ラウンドだけの試合の見出し */
+    singleRoundHeading: 'ラウンドの結果',
     accuracy: '正答率',
     maxCombo: '最大コンボ',
     power: '戦闘力',
@@ -195,12 +199,12 @@ export const common = {
     back: 'もどる',
     start: 'はじめる',
     title1: 'Brain Fighter へようこそ',
-    lead: '毎日 12〜15 分、3 つのミニゲームで戦闘力を上げよう',
+    lead: '毎日 10 分ほど、3 つのミニゲームで戦闘力を上げよう',
     body1:
       '反応・記憶・切り替えを試す3分ミニゲーム集です。格闘ゲーム風の演出で、ゲーム内の成績（戦闘力）と自己ベストを記録できます。',
     title2: 'あそび方',
     items2: [
-      '「今日のセッション」で、3 つのミニゲームを 1 試合（3 ラウンド）ずつ遊びます。',
+      '「今日のセッション」で、3 つのミニゲームを 1 試合ずつ遊びます（1 試合は 1〜3 ラウンド）。',
       '難度はゲームが成績に合わせて自動で決めます。戦闘力は、到達した難度から計算するゲーム内の成績です。',
       '週1回の昇段審査（認定戦）に合格すると、ベルトが上がります。',
       '目安は週 3〜5 日。間があいても記録はそのまま残ります。',

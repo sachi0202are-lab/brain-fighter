@@ -30,6 +30,16 @@ export interface BfSave {
   onboardedAt?: string;
 }
 
+/**
+ * 1 試合のラウンド数（「もう1ラウンド」を選ばないとき）。スタンスチェンジは 1 ラウンドだけでウォームアップも無い
+ * （仕様書 v1.1。ユーザーのフィードバックで短縮）。ダブルヒットとコンボ・リコールは 3 ラウンド。
+ */
+export const MATCH_ROUNDS: Readonly<Record<'double-hit' | 'combo-recall' | 'stance-change', number>> = {
+  'double-hit': 3,
+  'combo-recall': 3,
+  'stance-change': 1,
+};
+
 /** 端末のローカル日付 'YYYY-MM-DD'（今日から days 日前） */
 export function localDay(daysAgo = 0): string {
   const d = new Date(Date.now() - daysAgo * 86_400_000);
@@ -135,7 +145,8 @@ export async function expectNoDifficultyControls(page: Page, where: string): Pro
 /**
  * 開始前の画面で「スタート」を押し、試合が終わって結果画面が出るまで進める。
  * ラウンド間は「次のラウンドへ」で飛ばし、「もう1ラウンド」は選ばない。応答は autoplay が入れる。
- * onIntermission はラウンド間の画面（と「もう1ラウンド」の確認）が出るたびに、閉じる前に呼ばれる。
+ * onIntermission はラウンド間の画面（と「もう1ラウンド」の確認）が出るたびに、閉じる前に呼ばれる
+ * （1 ラウンドだけの試合 = スタンスチェンジはラウンド間の画面が無いので、呼ばれずに結果画面まで進む）。
  */
 export async function playMatch(page: Page, opts: { onIntermission?: () => Promise<void> } = {}): Promise<void> {
   await page.getByTestId('start').click();

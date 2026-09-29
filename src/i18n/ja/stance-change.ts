@@ -17,7 +17,7 @@ export const stanceChangeText = {
     '構えが出てから少しあとにアイコンが出ます。時間内に答えてください（敵レベル 11 からは構えC「形」: 丸 = 左／角 = 右 も加わります）。',
   ],
   keys: 'キー: ← ／ →（F ／ J でも可）',
-  /** 決まった傾向が無いラウンドの一言（ラウンド番号で順に使う） */
+  /** 決まった傾向が無いラウンドの一言（正答数とラウンド番号で順に使う。metrics.ts の genericTipIndex） */
   tips: [
     '構えの名前を心の中で唱えてから答えると迷いにくい',
     '構えが出ている間に、アイコンのどこを見るかを決めておくと答えやすい',
@@ -54,7 +54,7 @@ export const stanceChangeText = {
       `構え${letter}「${name}」${left} = 左／${right} = 右`,
     /** 構えと構えの区切り */
     join: '　',
-    /** ウォームアップ（単一課題）の説明 */
+    /** ウォームアップ（単一課題）の説明（毎日の試合はウォームアップ無しなので、今は出ない） */
     warmup: (rule: string, ignored: string): string => `ウォームアップは構えが変わりません。${rule}（${ignored}は気にせず答えます）`,
     /** 「色」「色と形」 */
     and: (names: readonly string[]): string => names.join('と'),

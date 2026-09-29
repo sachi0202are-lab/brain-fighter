@@ -5,6 +5,8 @@
  * - Full: Light ＋ コンボ表示・ラウンド間の必殺演出（技名テロップ）・静的なカスタム背景
  * どのプリセットでも、刺激の提示中に刺激領域の中・周りで動く演出や重なる要素が無く、正誤表示は 3 回/秒以下。
  * KO してもラウンドは最後まで続く。
+ * ラウンド間の演出はコンボ・リコール（3 ラウンド）で見る。スタンスチェンジは 1 ラウンドだけ（仕様書 v1.1）なので
+ * ラウンド間の画面が無く、結果画面の出し方（「一本勝負」、見出しに × 1 を付けない）を別に確かめる。
  * （試行数・提示時間などがプリセットで変わらないことは fx-equivalence.spec.ts と Vitest で照合している）
  */
 import { expect, test, type Page } from '@playwright/test';
@@ -12,9 +14,11 @@ import { collectErrors } from './helpers';
 
 type Fx = 'off' | 'light' | 'full';
 const ROUND_END = '[data-testid="intermission"][data-outcome="perfect"], [data-testid="intermission"][data-outcome="ko"]';
+/** ラウンド間の演出を見るゲーム（3 ラウンド。n = 1 の 1 ラウンドは 21 試行・52.5 秒） */
+const INTERMISSION_GAME = 'combo-recall';
 
-async function start(page: Page, fx: Fx): Promise<void> {
-  await page.goto(`./?test=1&seed=21&fx=${fx}#/play/stance-change`);
+async function start(page: Page, fx: Fx, gameId: string = INTERMISSION_GAME): Promise<void> {
+  await page.goto(`./?test=1&seed=21&fx=${fx}#/play/${gameId}`);
   await expect(page.locator(`.play.fx-${fx}`)).toBeVisible();
   await page.evaluate(() => {
     window.__bfTest.startFxAudit();
@@ -23,7 +27,7 @@ async function start(page: Page, fx: Fx): Promise<void> {
   await page.getByTestId('start').click();
 }
 
-/** 最初の本ラウンドを終えたラウンド間の画面まで進める（ウォームアップの後の画面は「次のラウンドへ」で閉じる） */
+/** 最初の本ラウンドを終えたラウンド間の画面まで進める（KO / PERFECT でない画面が出たら「次のラウンドへ」で閉じる） */
 async function toFirstRoundEnd(page: Page): Promise<void> {
   const target = page.locator(ROUND_END);
   const any = page.getByTestId('intermission');
@@ -147,6 +151,40 @@ test.describe('演出プリセット', () => {
       return issues;
     });
     expect(cssIssues).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  test('1 ラウンドだけの試合（スタンスチェンジ）: ラウンド間の画面を出さずに結果へ。「一本勝負」、見出しは × 1 を付けない', async ({ page }) => {
+    const errors = collectErrors(page);
+    await start(page, 'light', 'stance-change');
+    // 上帯は「ラウンド 1/1」ではなく「一本勝負」
+    await expect(page.locator('.hud-round')).toHaveText('一本勝負');
+    await expect(page.locator('.hud-enemy')).toBeVisible();
+    // 最初に出るのが結果画面（ラウンド間の画面・「もう1ラウンド」の確認は無い）
+    await page
+      .locator('[data-testid="next-round"], [data-testid="to-result"], [data-testid="result"]')
+      .first()
+      .waitFor({ state: 'visible', timeout: 240_000 });
+    await expect(page.getByTestId('result')).toBeVisible();
+    await expect(page.getByTestId('next-round')).toHaveCount(0);
+    await expect(page.getByTestId('to-result')).toHaveCount(0);
+    const logs = await page.evaluate(() => window.__bfTest.logs());
+    expect(logs.map((r) => `${r.kind}:${r.roundNo}:${r.trials.length}`)).toEqual(['round:1:30']);
+    expect(logs[0]!.trials.every((t) => t.correct)).toBe(true);
+    // 結果画面: 見出しは「PERFECT」（「PERFECT × 1」にしない）、ラウンドの行は 1 つで「一本勝負」
+    const result = page.getByTestId('result');
+    await expect(page.getByTestId('result-headline')).toHaveText('PERFECT');
+    await expect(result.locator('.card-title').first()).toHaveText('ラウンドの結果');
+    await expect(result.locator('.round-item')).toHaveCount(1);
+    await expect(result.locator('.round-item .round-no')).toHaveText('一本勝負');
+    await expect(result.locator('.round-item .round-outcome')).toHaveText('PERFECT');
+    await expect(result.locator('canvas.fighters')).toHaveCount(1);
+    // 戦闘力: ステップ 1・正答率 100% → round(1000 × ((1 − 1) + 1) / 20) = 50。1 ラウンドでも適応してステップ 2 へ
+    await expect(result.locator('.stat', { hasText: '戦闘力' }).locator('.stat-value')).toHaveText('0 → 50（+50）');
+    const save = await page.evaluate(() => window.__bfTest.save());
+    expect(save.rounds.map((r) => [r.gameId, r.kind ?? 'round', r.trials, r.correct, r.power])).toEqual([['stance-change', 'round', 30, 30, 50]]);
+    expect(save.games['stance-change']!.state.step).toBe(2);
+    await expectSafeAudit(page);
     expect(errors).toEqual([]);
   });
 });

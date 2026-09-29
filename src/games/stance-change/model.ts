@@ -26,7 +26,8 @@ export type Side = 'left' | 'right';
 
 /**
  * 直前の試行との関係。
- * first = ラウンド最初の試行（前が無い）、repeat = 同じ構え、switch = 構えが変わった、single = ウォームアップ（単一課題）
+ * first = ラウンド最初の試行（前が無い）、repeat = 同じ構え、switch = 構えが変わった、
+ * single = ウォームアップ（単一課題ブロック。測定用に残してあり、毎日の試合では出ない）
  */
 export type Transition = 'first' | 'repeat' | 'switch' | 'single';
 

@@ -3,7 +3,7 @@
  * - 必殺演出（Full・ラウンド間のみ）は一度だけ動いて止まり、明るさが上下に振れる（点滅する）要素が無い。
  * - Full の背景は静的（アニメーション無し・レベルから決定的）。
  * - CSS: 繰り返すアニメーションは 1 周 1/3 秒以上（点滅 3 回/秒以下）。刺激領域（.stim）には動きを付けない。
- * - 結果画面の見出しは KO / PERFECT の数だけ（判定負けは見出しにしない）。
+ * - 結果画面の見出しは KO / PERFECT の数だけ（判定負けは見出しにしない。1 ラウンドの試合は数を付けない）。
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { installFakeDocument, type FakeElement } from '../test/fake-dom';
@@ -67,6 +67,15 @@ describe('結果画面の見出し', () => {
     const el = outcomeHeadline(['ko', 'decision', 'perfect', 'ko']) as unknown as FakeElement;
     expect(el.children.map((c) => c.textContent)).toEqual(['PERFECT × 1', 'KO × 2']);
     expect(outcomeHeadline(['decision', 'decision', null])).toBeNull();
+  });
+
+  it('1 ラウンドだけの試合は数を付けない（「KO × 1」ではなく「KO」）', () => {
+    const ko = outcomeHeadline(['ko']) as unknown as FakeElement;
+    expect(ko.children.map((c) => c.textContent)).toEqual(['KO']);
+    const perfect = outcomeHeadline(['perfect']) as unknown as FakeElement;
+    expect(perfect.children.map((c) => c.textContent)).toEqual(['PERFECT']);
+    expect(outcomeHeadline(['decision'])).toBeNull();
+    expect(outcomeHeadline([null])).toBeNull();
   });
 });
 

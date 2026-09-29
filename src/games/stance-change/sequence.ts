@@ -14,9 +14,12 @@ import type { Rng } from '../../engine/rng';
 import { balancedCounts } from '../../engine/sequence';
 import { activeRules, opposite, type Rule, type ScTrial, type Side, type Transition } from './model';
 
-/** 1ラウンドの試行数 */
+/** 1ラウンドの試行数（1試合 = 1 ラウンド） */
 export const TRIALS_PER_ROUND = 30;
-/** 試合冒頭の単一課題ウォームアップの試行数 */
+/**
+ * 単一課題ウォームアップの試行数。毎日の試合ではウォームアップをしない（仕様書 v1.1。createWarmup は定義しない）が、
+ * 混合コストを測るときのために試行列づくり（makeWarmupTrials）は残してある。
+ */
 export const WARMUP_TRIALS = 12;
 /** 同じ構えの連続の上限 */
 export const MAX_SAME_STANCE = 4;
@@ -164,7 +167,7 @@ export function makeRoundTrials(rng: Rng, rules: number, untrained: boolean, n: 
   return trialsFromCues(rng, cueSequence(rng, n, activeRules(rules)), rules, untrained);
 }
 
-/** 単一課題ウォームアップ（切替なし・構えA のみ）の試行列 */
+/** 単一課題ウォームアップ（切替なし・構えA のみ）の試行列。毎日の試合では使わない（測定用） */
 export function makeWarmupTrials(rng: Rng, rules: number, untrained: boolean, n: number = WARMUP_TRIALS): ScTrial[] {
   const cues: Cue[] = Array.from({ length: n }, () => ({ rule: WARMUP_RULE, transition: 'single' as const }));
   return trialsFromCues(rng, cues, rules, untrained);

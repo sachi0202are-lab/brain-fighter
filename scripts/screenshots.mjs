@@ -129,10 +129,12 @@ function sampleSave(now = Date.now()) {
   daysAgo.forEach((ago, dayIdx) => {
     const order = orders[dayIdx % 3];
     let t = at(ago, 20, 5);
-    sessions.push({ id: `s${dayIdx}`, startedAt: new Date(t).toISOString(), endedAt: new Date(t + 14 * 60_000).toISOString(), order, done: [...order] });
+    sessions.push({ id: `s${dayIdx}`, startedAt: new Date(t).toISOString(), endedAt: new Date(t + 10 * 60_000).toISOString(), order, done: [...order] });
     for (const gameId of order) {
       const matchId = `m-${gameId}-${dayIdx}`;
-      for (let roundNo = 1; roundNo <= 3; roundNo++) {
+      // 1 試合のラウンド数: スタンスチェンジは 1 ラウンド（仕様書 v1.1）、ほかは 3 ラウンド
+      const roundsPerMatch = gameId === 'stance-change' ? 1 : 3;
+      for (let roundNo = 1; roundNo <= roundsPerMatch; roundNo++) {
         t += 95_000;
         let rec;
         if (gameId === 'double-hit') {
@@ -473,14 +475,12 @@ async function run(browser) {
   await shot(page, '05-combo-recall');
   await unfreeze(page);
 
-  // ---- スタンスチェンジ（構え = 手がかり ＋ 攻撃アイコン） ----
+  // ---- スタンスチェンジ（構え = 手がかり ＋ 攻撃アイコン。1 試合 1 ラウンドでウォームアップは無い） ----
   await page.goto(url('./?test=1&seed=1#/play/stance-change'));
   await page.getByTestId('start').waitFor();
   await installFreeze(page);
   await page.evaluate(() => window.__bfTest.autoplay({ delayMs: 60, correct: () => true }));
   await page.getByTestId('start').click();
-  await page.getByTestId('intermission').waitFor({ timeout: 180_000 }); // ウォームアップの後
-  await page.getByTestId('next-round').click();
   await waitSnapshot(page, "s.kind === 'round' && s.i === 2 && s.phase === 'cue'");
   await page.evaluate(() => window.__bfTest.stopAutoplay());
   await freezeWhen(page, "s.kind === 'round' && s.i === 2 && s.phase === 'stimulus'");

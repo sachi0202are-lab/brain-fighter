@@ -8,7 +8,7 @@
  * - 12: 提示時間の実測誤差（±1 フレーム）と、ラウンド中の rAF の間隔（60 fps）
  */
 import { expect, test } from '@playwright/test';
-import { collectErrors, expectNoDifficultyControls, playMatch, type BfTestLogRound } from './helpers';
+import { collectErrors, expectNoDifficultyControls, MATCH_ROUNDS, playMatch, type BfTestLogRound } from './helpers';
 
 function note(type: string, description: string): void {
   test.info().annotations.push({ type, description });
@@ -29,7 +29,7 @@ function phaseErrors(logs: BfTestLogRound[], filter: (name: string) => boolean):
 }
 
 test('ホーム → 今日のセッション → 3ゲームを最後まで → 結果 → 記録', async ({ page }) => {
-  // 本実装の試行数（1ラウンド 24〜30 試行）ではセッション全体で 10 分前後かかる
+  // 本実装の試行数（ダブルヒット 24 × 3、コンボ・リコール 21 × 3、スタンスチェンジ 30 × 1）でセッション全体 6〜7 分かかる
   test.setTimeout(20 * 60_000);
   const errors = collectErrors(page);
   await page.goto('./?test=1&seed=7#/');
@@ -68,8 +68,12 @@ test('ホーム → 今日のセッション → 3ゲームを最後まで → �
     frames: window.__bfTest.frameStats(),
   }));
   const training = save.rounds.filter((r) => r.kind !== 'warmup');
-  expect(training).toHaveLength(9);
-  expect(new Set(training.map((r) => r.gameId)).size).toBe(3);
+  // 1 試合のラウンド数: ダブルヒット 3・コンボ・リコール 3・スタンスチェンジ 1（ウォームアップも無い）= 7
+  expect(save.rounds.filter((r) => r.kind === 'warmup')).toHaveLength(0);
+  expect(training).toHaveLength(7);
+  for (const [gameId, n] of Object.entries(MATCH_ROUNDS)) {
+    expect(training.filter((r) => r.gameId === gameId), gameId).toHaveLength(n);
+  }
   const trials = training.reduce((a, r) => a + r.trials, 0);
   const correct = training.reduce((a, r) => a + r.correct, 0);
   expect(correct / trials).toBeGreaterThan(0.7);
@@ -78,8 +82,9 @@ test('ホーム → 今日のセッション → 3ゲームを最後まで → �
     expect(r.power).toBeGreaterThanOrEqual(0);
     expect(r.power).toBeLessThanOrEqual(1000);
   }
-  // 試行ごとの生ログが保存されている
+  // 試行ごとの生ログが保存されている（24 × 3 + 21 × 3 + 30 = 165 試行。コンボ・リコールの n が上がれば増える）
   const logged = logs.reduce((a, r) => a + r.trials.length, 0);
+  expect(logged).toBeGreaterThanOrEqual(165);
   expect(save.trials).toHaveLength(logged);
   expect(save.sessions?.[0]?.done).toHaveLength(3);
 
@@ -97,8 +102,11 @@ test('ホーム → 今日のセッション → 3ゲームを最後まで → �
   const stim = phaseErrors(logs, (n) => n === 'stimulus');
   note('timing', `固定長フェーズ ${describe(all)}（フレーム ${frameMs.toFixed(2)} ms）`);
   note('timing-stimulus', `刺激の提示（stimulus）${describe(stim)}`);
-  expect(all.length).toBeGreaterThan(100);
-  expect(stim.length).toBeGreaterThan(40);
+  // 分母: 固定長フェーズ = ダブルヒット 5 × 72 試行（注視・刺激・マスク・フィードバック・試行間隔）
+  //   + コンボ・リコール 2 × 63 試行（点灯・消灯）+ スタンスチェンジ 3 × 30 試行（構え・フィードバック・試行間隔）= 576。
+  // 刺激フェーズ = ダブルヒット 72 + コンボ・リコール 63 = 135（スタンスチェンジの刺激は応答で打ち切るので含まない）
+  expect(all.length).toBeGreaterThanOrEqual(576);
+  expect(stim.length).toBeGreaterThanOrEqual(135);
   expect(all.filter((e) => e <= tol).length / all.length).toBeGreaterThanOrEqual(0.9);
   expect(stim.filter((e) => e <= tol).length / stim.length).toBeGreaterThanOrEqual(0.9);
 
@@ -107,13 +115,15 @@ test('ホーム → 今日のセッション → 3ゲームを最後まで → �
     'fps',
     `ラウンド中の rAF ${frames.frames} 回: 平均 ${frames.fps.toFixed(1)} fps、95% 点 ${frames.p95Ms.toFixed(1)} ms、最大 ${frames.maxMs.toFixed(1)} ms、1.5 フレーム超の間隔 ${frames.longFrames} 回（${((100 * frames.longFrames) / Math.max(1, frames.frames)).toFixed(2)}%）`,
   );
-  expect(frames.frames).toBeGreaterThan(10_000);
+  // ラウンドの合計は約 5.5 分（ダブルヒット 約 2 分・コンボ・リコール 約 2.6 分・スタンスチェンジ 約 1 分）≒ 2 万フレーム
+  expect(frames.frames).toBeGreaterThan(15_000);
   expect(frames.fps).toBeGreaterThanOrEqual(55);
   expect(frames.longFrames / frames.frames).toBeLessThanOrEqual(0.05);
 
   // ---- 受け入れ基準 8: 刺激の提示中に動く・重なる演出が無い、正誤表示は 3 回/秒以下（3 ゲームとも） ----
   note('fx-audit', `刺激提示 ${audit.stimulusPhases} 回で違反 ${audit.violations.length} 件、正誤表示 ${audit.feedbackShown} 回（1 秒あたり最大 ${audit.maxFeedbackPerSecond} 回）`);
-  expect(audit.stimulusPhases).toBeGreaterThan(150);
+  // 刺激の提示は 1 試行に 1 回なので、調べた回数 = 試行数（165 以上）
+  expect(audit.stimulusPhases).toBe(logged);
   expect(audit.violations).toEqual([]);
   expect(audit.maxFeedbackPerSecond).toBeLessThanOrEqual(3);
 

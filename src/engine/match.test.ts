@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { fakeGame } from '../test/fake-game';
-import { runMatchHeadless } from './headless';
-import { concludeRound, surfaceIndex } from './match';
+import { runMatchHeadless, runRoundHeadless } from './headless';
+import { concludeRound, runMatch, surfaceIndex } from './match';
+import { hashSeed } from './rng';
 import type { RoundSummary } from './types';
 import type { FakeParams, FakeTrial } from '../test/fake-game';
 
@@ -29,6 +30,31 @@ describe('試合の進行', () => {
     expect(res.warmup!.power).toBe(123);
     expect(res.warmup!.paramsEnd).toEqual({ level: 2, stimMs: 100 });
     expect(res.warmup!.summary.paramsPlayed.stimMs).toBe(100);
+  });
+
+  it('roundsPerMatch = 1 なら 1 ラウンドで終わり、ラウンド間（between）も「もう1ラウンド」の確認も呼ばない', async () => {
+    const game = { ...fakeGame({ trials: 4 }), roundsPerMatch: 1 };
+    const calls: string[] = [];
+    const res = await runMatch(
+      { game, params: { level: 3, stimMs: 100 }, surface: 0, previousPower: 0, seedFor: (k, n) => hashSeed(5, game.id, k, n) },
+      {
+        runRound: (req) =>
+          runRoundHeadless(game, req.trials, req.params, req.options, req.adaptive, { plan: ({ expected }) => [expected!.side as string] }),
+        onRoundDone: (d) => void calls.push(`done:${d.summary.kind}:${d.summary.roundNo}`),
+        between: async () => void calls.push('between'),
+        askExtra: async () => {
+          calls.push('askExtra');
+          return true;
+        },
+      },
+    );
+    expect(res.warmup).toBeNull();
+    expect(res.rounds).toHaveLength(1);
+    expect(calls).toEqual(['done:round:1']);
+    // ラウンド単位の適応と戦闘力は 1 ラウンドでも行う（全問正解 → level +1、次の試合はその難度から）
+    expect(res.rounds[0]!.summary.paramsPlayed.level).toBe(3);
+    expect(res.paramsEnd.level).toBe(4);
+    expect(res.rounds[0]!.power).toBe(350);
   });
 
   it('extraRounds があれば「もう1ラウンド」で1本増える', async () => {

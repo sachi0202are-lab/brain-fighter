@@ -45,6 +45,18 @@ describe('画面の文言', () => {
     expect(hits).toEqual([]);
   });
 
+  it('ラウンドの表示: 「ラウンド 2/3」。1 ラウンドだけの試合（スタンスチェンジ）は「ラウンド 1/1」ではなく「一本勝負」', () => {
+    expect(ja.play.round(2, 3)).toBe('ラウンド 2/3');
+    expect(ja.play.round(1, 1)).toBe('一本勝負');
+    expect(ja.result.singleRoundHeading).toBe('ラウンドの結果');
+  });
+
+  it('所要時間の案内は、ゲームごとのラウンド数の違いを入れた実態（合計 約10分）に合わせる', () => {
+    expect(ja.home.sessionNote).toContain('約10分');
+    expect(ja.welcome.lead).toContain('10 分');
+    expect(ja.welcome.items2[0]).toContain('1〜3 ラウンド');
+  });
+
   it('ベルトは 白帯〜黒帯二段 の 10 段（仕様書 第7節）', () => {
     expect(Array.from({ length: 10 }, (_, k) => beltName(k))).toEqual(['白帯', '黄帯', '橙帯', '緑帯', '青帯', '紫帯', '茶帯', '赤帯', '黒帯', '黒帯二段']);
     expect(beltName(-1)).toBe('白帯');

@@ -9,9 +9,10 @@ import { stanceChangeText as text } from '../../i18n/ja/stance-change';
 import { mockContext2D } from '../../test/mock-canvas';
 import { describeStance, FEEDBACK_MS, game, introText, ITI_MS, judgeStance, responseLabels } from './index';
 import { ladderParams } from './ladder';
-import { stanceMetrics, tipKey } from './metrics';
+import { genericTipIndex, stanceMetrics, tipKey } from './metrics';
 import type { ScParams, ScTrial, Transition } from './model';
 import { iconPlacement, iconShape, lookFor, paletteFor, SURFACES, UNTRAINED_LOOK } from './render';
+import { makeWarmupTrials } from './sequence';
 
 const OPTS: RoundOptions = { untrained: false, surface: 0, roundNo: 1, kind: 'round' };
 
@@ -232,9 +233,10 @@ describe('記録（metrics）: 切替コスト・混合コスト', () => {
 });
 
 describe('記録（metrics）: ヘッドレスで反応時間を作り分ける', () => {
-  it('切替試行だけ 150 ms 遅いと切替コスト ≒ 150、混合コスト ≒ 100', async () => {
+  it('切替試行だけ 150 ms 遅いと切替コスト ≒ 150、混合コスト ≒ 100（単一課題ブロックを渡したとき）', async () => {
     const p = ladderParams(2);
-    const warmTrials = game.createWarmup!(p, mulberry32(31), { ...OPTS, kind: 'warmup', roundNo: 0 });
+    // 毎日の試合はウォームアップ無し。混合コストの計算は、単一課題ブロック（測定用に残した makeWarmupTrials）を渡したときだけ
+    const warmTrials = makeWarmupTrials(mulberry32(31), p.rules, false);
     const roundTrials = game.createRound(p, mulberry32(32), OPTS);
     const plan = ({ expected }: { expected: Record<string, string> | null }) => correctPlan(expected);
     const warm = await runRoundHeadless(game, warmTrials, p, { ...OPTS, kind: 'warmup', roundNo: 0 }, false, {
@@ -250,6 +252,11 @@ describe('記録（metrics）: ヘッドレスで反応時間を作り分ける'
     expect(Math.abs(m.switchCost! - 150)).toBeLessThanOrEqual(F);
     expect(Math.abs(m.mixingCost! - 100)).toBeLessThanOrEqual(F);
     expect(m.accuracy).toBe(1);
+    // 毎日の試合と同じくウォームアップが無ければ、切替コストだけ（混合コスト・単一課題の RT は入れない）
+    const daily = game.metrics!(round, { warmup: null });
+    expect(daily.switchCost).toBe(m.switchCost);
+    expect(daily.mixingCost).toBeUndefined();
+    expect(daily.rtSingle).toBeUndefined();
     // 戦闘力は速さに関係しない（同じ正誤で全部 400 ms にしても同じ）
     const flat = await runRoundHeadless(game, roundTrials, p, OPTS, true, { plan, delayMs: 400 });
     expect(game.power(flat.paramsPlayed, flat)).toBe(game.power(round.paramsPlayed, round));
@@ -281,11 +288,23 @@ describe('ラウンドの一言・ルールの一言', () => {
   it('文言は i18n から選ぶ（禁止語の検査は npm run lint:words）', () => {
     expect(game.roundTip!(base(trs, [1, 3, 5, 7, 9]))).toBe(text.tipFor.switch);
     expect(text.tipFor.switch).toContain('0.2 秒');
-    // 傾向の無いラウンドはラウンド番号で順に
-    const generic = base(trs, [1, 2, 3, 4, 5], [], true);
-    const seen = [1, 2, 3].map((roundNo) => game.roundTip!({ ...generic, roundNo }));
-    expect(seen).toEqual([...text.tips]);
     for (const t of [...Object.values(text.tipFor), ...text.tips]) expect(t.length).toBeGreaterThan(0);
+  });
+
+  it('傾向の無いラウンドの一言は、正答数とラウンド番号で順に替える（1試合 1 ラウンドでも毎回同じにならない）', () => {
+    const generic = base(trs, [1, 2, 3, 4, 5], [], true); // 25 / 30 正答
+    expect(tipKey(generic)).toBe('generic');
+    const n = text.tips.length;
+    // 1 ラウンドの試合（roundNo = 1）でも、正答数が違えば別の一言になり、3 つとも出る
+    const byCorrect = [24, 25, 26].map((correct) => game.roundTip!({ ...generic, correct }));
+    expect(new Set(byCorrect).size).toBe(n);
+    expect([...byCorrect].sort()).toEqual([...text.tips].sort());
+    // ラウンド番号が 1 つ進めば次の一言（今までの順番どおり）
+    const byRound = [1, 2, 3].map((roundNo) => game.roundTip!({ ...generic, roundNo }));
+    const start = genericTipIndex(generic, n);
+    expect(byRound).toEqual([0, 1, 2].map((k) => text.tips[(start + k) % n]));
+    expect(genericTipIndex({ roundNo: 1, correct: 0 }, n)).toBe(0);
+    expect(genericTipIndex({ roundNo: 0, correct: -3 }, n)).toBe(0);
   });
 
   it('roundIntro は構えの意味を毎ラウンド出す（ルール数・ウォームアップ・未訓練セット）', () => {
@@ -384,42 +403,103 @@ describe('描画（renderStimulus）', () => {
   });
 });
 
-describe('ヘッドレスの試合', () => {
-  it('ウォームアップ 12 試行（構えAのみ・適応なし）＋ 30 試行 × 3 ラウンド', async () => {
+describe('ヘッドレスの試合（1試合 = 30 試行 × 1 ラウンド・ウォームアップ無し）', () => {
+  /** 1試合（= 1 ラウンド）を続けて遊び、ラウンドごとの結果を集める */
+  async function playMatches(
+    from: ScParams,
+    matches: number,
+    seed: number,
+    plan: Parameters<typeof runMatchHeadless>[3] = {},
+  ): Promise<{ rounds: { step: number; rules: number; accuracy: number; power: number; next: ScParams; shape: boolean }[]; end: ScParams }> {
+    let params = from;
+    const rounds: { step: number; rules: number; accuracy: number; power: number; next: ScParams; shape: boolean }[] = [];
+    for (let m = 0; m < matches; m++) {
+      const res = await runMatchHeadless(game, params, { seed: seed + m }, plan);
+      expect(res.warmup).toBeNull();
+      expect(res.rounds).toHaveLength(1);
+      const r = res.rounds[0]!;
+      rounds.push({
+        step: r.summary.paramsPlayed.step,
+        rules: r.summary.paramsPlayed.rules,
+        accuracy: r.summary.accuracy,
+        power: r.power,
+        next: r.paramsEnd,
+        shape: r.summary.results.some((x) => x.trial.rule === 'shape'),
+      });
+      expect(res.paramsEnd).toEqual(r.paramsEnd);
+      params = res.paramsEnd;
+    }
+    return { rounds, end: params };
+  }
+
+  it('1 ラウンド 30 試行だけ（ウォームアップ無し）。切替コストは記録し、混合コスト・単一課題の RT は記録しない', async () => {
+    expect(game.roundsPerMatch).toBe(1);
+    expect(game.createWarmup).toBeUndefined();
     const res = await runMatchHeadless(game, game.initialParams, { seed: 5 });
-    expect(res.warmup!.summary.trials).toBe(12);
-    expect(res.warmup!.summary.results.every((r) => r.trial.rule === 'height' && r.trial.transition === 'single')).toBe(true);
-    expect(res.warmup!.paramsEnd).toEqual(game.initialParams);
-    expect(res.rounds.map((r) => r.summary.trials)).toEqual([30, 30, 30]);
-    for (const r of res.rounds) {
-      // 既定の疑似プレイヤーは 5 試行に1回誤る = 80% → 維持
-      expect(r.summary.accuracy).toBeCloseTo(0.8, 9);
-      expect(r.paramsEnd).toEqual(ladderParams(1));
-      expect(r.metrics.mixingCost).toBeDefined();
-      expect(r.metrics.switchCost).toBeDefined();
+    expect(res.warmup).toBeNull();
+    expect(res.rounds).toHaveLength(1);
+    const r = res.rounds[0]!;
+    expect(r.summary.kind).toBe('round');
+    expect(r.summary.roundNo).toBe(1);
+    expect(r.summary.trials).toBe(30);
+    expect(r.summary.results[0]!.trial.transition).toBe('first');
+    expect(r.summary.results.every((x) => x.trial.transition !== 'single')).toBe(true);
+    // 既定の疑似プレイヤーは 5 試行に1回誤る = 80% → 維持
+    expect(r.summary.accuracy).toBeCloseTo(0.8, 9);
+    expect(r.paramsEnd).toEqual(ladderParams(1));
+    expect(res.paramsEnd).toEqual(ladderParams(1));
+    expect(r.metrics.switchCost).toBeDefined();
+    expect(r.metrics.rtRepeat).toBeDefined();
+    expect(r.metrics.rtSwitch).toBeDefined();
+    expect(r.metrics.mixingCost).toBeUndefined();
+    expect(r.metrics.rtSingle).toBeUndefined();
+    // 戦闘力 = round(1000 × ((1 − 1) + (0.80 − 0.75) / (0.90 − 0.75)) / 20) = 17
+    expect(r.power).toBe(17);
+  });
+
+  it('1 ラウンドでも適応する: 正答率 90%（27/30）で +1、76.7%（23/30）で維持、73.3%（22/30）で −1', async () => {
+    const withWrong = (wrong: number): Parameters<typeof runMatchHeadless>[3] => ({
+      plan: ({ i, expected, layout }) => (i < wrong ? wrongPlan(layout, expected) : correctPlan(expected)),
+    });
+    const cases: [number, number, number][] = [
+      // [誤答数, 開始ステップ, 次のステップ]
+      [3, 5, 6],
+      [7, 5, 5],
+      [8, 5, 4],
+      [0, 20, 20],
+      [15, 1, 1],
+    ];
+    for (const [wrong, from, to] of cases) {
+      const { rounds, end } = await playMatches(ladderParams(from), 1, 40 + wrong, withWrong(wrong));
+      expect(rounds[0]!.accuracy, `誤答 ${wrong}`).toBeCloseTo((30 - wrong) / 30, 9);
+      expect(rounds[0]!.step, `誤答 ${wrong}`).toBe(from);
+      expect(end, `誤答 ${wrong}`).toEqual(ladderParams(to));
     }
   });
 
-  it('全問正解なら毎ラウンド +1（ステップ 10 → 11 で 3 ルールになる）', async () => {
-    const res = await runMatchHeadless(game, ladderParams(9), { seed: 6 }, { plan: ({ expected }) => correctPlan(expected) });
-    expect(res.rounds.map((r) => r.summary.paramsPlayed.step)).toEqual([9, 10, 11]);
-    expect(res.rounds.map((r) => r.summary.paramsPlayed.rules)).toEqual([2, 2, 3]);
-    expect(res.rounds[2]!.summary.results.some((r) => r.trial.rule === 'shape')).toBe(true);
-    expect(res.paramsEnd).toEqual(ladderParams(12));
-    expect(res.rounds.map((r) => r.power)).toEqual([450, 500, 550]);
+  it('全問正解なら 1 試合で +1（1日に最大 1 ステップ）。試合を重ねるとステップ 10 → 11 で 3 ルールになる', async () => {
+    const { rounds, end } = await playMatches(ladderParams(9), 3, 6, { plan: ({ expected }) => correctPlan(expected) });
+    expect(rounds.map((r) => r.step)).toEqual([9, 10, 11]);
+    expect(rounds.map((r) => r.rules)).toEqual([2, 2, 3]);
+    expect(rounds.map((r) => r.shape)).toEqual([false, false, true]);
+    expect(end).toEqual(ladderParams(12));
+    // 戦闘力 = round(1000 × ((L − 1) + 1) / 20)
+    expect(rounds.map((r) => r.power)).toEqual([450, 500, 550]);
   });
 
-  it('70% なら毎ラウンド −1（下端 1 で止まる）', async () => {
+  it('70% なら 1 試合で −1（下端 1 で止まる）', async () => {
     const seventy = (i: number): boolean => i % 10 < 7;
-    const res = await runMatchHeadless(game, ladderParams(2), { seed: 7 }, {
+    const { rounds, end } = await playMatches(ladderParams(2), 3, 7, {
       plan: ({ i, expected, layout }) => (seventy(i) ? correctPlan(expected) : wrongPlan(layout, expected)),
     });
-    expect(res.rounds.map((r) => r.summary.accuracy)).toEqual([0.7, 0.7, 0.7]);
-    expect(res.rounds.map((r) => r.summary.paramsPlayed.step)).toEqual([2, 1, 1]);
-    expect(res.paramsEnd.step).toBe(1);
+    expect(rounds.map((r) => r.accuracy)).toEqual([0.7, 0.7, 0.7]);
+    expect(rounds.map((r) => r.step)).toEqual([2, 1, 1]);
+    expect(end.step).toBe(1);
+    // 正答率 75% 未満の戦闘力は sub = 0 → round(1000 × (L − 1) / 20)
+    expect(rounds.map((r) => r.power)).toEqual([50, 0, 0]);
   });
 
-  it('認定戦（適応なし・未訓練セット）ではステップも難度も動かない', async () => {
+  it('認定戦（適応なし・未訓練セット・2 ラウンド）ではステップも難度も動かない', async () => {
     const p = game.certParams(7);
     const res = await runMatchHeadless(game, p, { seed: 8, adaptive: false, untrained: true, rounds: 2, warmup: false }, {
       plan: ({ expected }) => correctPlan(expected),
@@ -435,22 +515,19 @@ describe('ヘッドレスの試合', () => {
 
   it('正答率 80%（毎試行 p = 0.8）で数試合続けても、ステップは規則どおり ±1 ずつ・1〜20 の中で動く', async () => {
     const rng = mulberry32(2026);
-    let params = game.initialParams;
+    // 1試合 = 1 ラウンドなので、以前（6 試合 × 3 ラウンド）と同じ 18 ラウンドぶん遊ぶ
+    const { rounds } = await playMatches(game.initialParams, 18, 100, {
+      plan: ({ expected, layout }) => (rng.next() < 0.8 ? correctPlan(expected) : wrongPlan(layout, expected)),
+    });
     const seen: number[] = [];
-    for (let m = 0; m < 6; m++) {
-      const res = await runMatchHeadless(game, params, { seed: 100 + m }, {
-        plan: ({ expected, layout }) => (rng.next() < 0.8 ? correctPlan(expected) : wrongPlan(layout, expected)),
-      });
-      for (const r of res.rounds) {
-        const from = r.summary.paramsPlayed.step;
-        const to = r.paramsEnd.step;
-        const acc = r.summary.accuracy;
-        const want = acc + 1e-9 >= 0.9 ? Math.min(20, from + 1) : acc + 1e-9 < 0.75 ? Math.max(1, from - 1) : from;
-        expect(to).toBe(want);
-        expect(r.paramsEnd).toEqual(ladderParams(to));
-        seen.push(from);
-      }
-      params = res.paramsEnd;
+    for (const r of rounds) {
+      const from = r.step;
+      const to = r.next.step;
+      const acc = r.accuracy;
+      const want = acc + 1e-9 >= 0.9 ? Math.min(20, from + 1) : acc + 1e-9 < 0.75 ? Math.max(1, from - 1) : from;
+      expect(to).toBe(want);
+      expect(r.next).toEqual(ladderParams(to));
+      seen.push(from);
     }
     expect(Math.min(...seen)).toBeGreaterThanOrEqual(1);
     expect(Math.max(...seen)).toBeLessThanOrEqual(20);

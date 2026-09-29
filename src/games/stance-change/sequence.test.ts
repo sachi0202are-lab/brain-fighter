@@ -125,7 +125,7 @@ describe.each([2, 3])('訓練ラウンドの系列（%i ルール）', (rules) =
   }
 });
 
-describe('ウォームアップ（単一課題）', () => {
+describe('ウォームアップ（単一課題。毎日の試合では使わない・測定用に残す）', () => {
   it('12 試行・構えAのみ・切替なし。一致／不一致と左右はそれぞれ 6/6', () => {
     for (const rules of [2, 3]) {
       for (const s of SEEDS.slice(0, 50)) {
@@ -139,9 +139,10 @@ describe('ウォームアップ（単一課題）', () => {
     }
   });
 
-  it('createWarmup は現在の難度（ルール数）で作る', () => {
-    const w = game.createWarmup!(ladderParams(12), mulberry32(3), { ...OPTS, kind: 'warmup', roundNo: 0 });
-    expect(w).toHaveLength(12);
+  it('毎日の試合ではウォームアップをしない（createWarmup を定義しない）。試行列づくりは難度のルール数で動く', () => {
+    expect(game.createWarmup).toBeUndefined();
+    const w = makeWarmupTrials(mulberry32(3), ladderParams(12).rules, false);
+    expect(w).toHaveLength(WARMUP_TRIALS);
     expect(w.some((t) => t.shape !== null)).toBe(true);
   });
 });

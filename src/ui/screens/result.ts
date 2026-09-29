@@ -1,4 +1,7 @@
-/** 結果画面: KO / PERFECT / 判定、正答率、最大コンボ、戦闘力の増減、自己ベスト差、一言。「次のゲームへ」「ホームへ」 */
+/**
+ * 結果画面: KO / PERFECT / 判定、正答率、最大コンボ、戦闘力の増減、自己ベスト差、一言。「次のゲームへ」「ホームへ」
+ * 1 ラウンドだけの試合（スタンスチェンジ）は、ラウンドを「一本勝負」、見出しを「ラウンドの結果」「KO」（× 1 を付けない）で出す。
+ */
 import { gameText, ja } from '../../i18n/ja';
 import { fightersCanvas, outcomeHeadline, outcomeText } from '../../skin/banner';
 import { SKIN_FEATURES } from '../../skin/presets';
@@ -57,7 +60,12 @@ export function mountResult(app: App, root: HTMLElement): () => void {
       topBar(`${name} ${ja.result.title}`, true),
       features.outcomeLogo ? outcomeHeadline(v.rounds.map((r) => r.outcome)) : null,
       features.fighters && last?.outcome ? h('div', { class: 'scene' }, fightersCanvas({ outcome: last.outcome, level: v.level })) : null,
-      h('section', { class: 'card' }, h('h2', { class: 'card-title' }, ja.result.roundsHeading), rounds),
+      h(
+        'section',
+        { class: 'card' },
+        h('h2', { class: 'card-title' }, v.rounds.length === 1 ? ja.result.singleRoundHeading : ja.result.roundsHeading),
+        rounds,
+      ),
       h(
         'section',
         { class: 'card stats' },
