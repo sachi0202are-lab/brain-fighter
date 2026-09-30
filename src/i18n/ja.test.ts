@@ -6,6 +6,7 @@
  * （第12節の「使わない語」は scripts/lint-words.mjs が src/ 全体を調べる）
  */
 import { describe, expect, it } from 'vitest';
+import { GAMES } from '../games';
 import { GAME_IDS } from '../storage/schema';
 import { beltName, gameText, ja } from './ja';
 
@@ -45,16 +46,24 @@ describe('画面の文言', () => {
     expect(hits).toEqual([]);
   });
 
-  it('ラウンドの表示: 「ラウンド 2/3」。1 ラウンドだけの試合（スタンスチェンジ）は「ラウンド 1/1」ではなく「一本勝負」', () => {
+  it('ラウンドの表示: 「ラウンド 2/3」。1 ラウンドだけの試合（v1.2 からは 3 ゲームとも）は「ラウンド 1/1」ではなく「一本勝負」', () => {
     expect(ja.play.round(2, 3)).toBe('ラウンド 2/3');
     expect(ja.play.round(1, 1)).toBe('一本勝負');
     expect(ja.result.singleRoundHeading).toBe('ラウンドの結果');
   });
 
-  it('所要時間の案内は、ゲームごとのラウンド数の違いを入れた実態（合計 約10分）に合わせる', () => {
-    expect(ja.home.sessionNote).toContain('約10分');
-    expect(ja.welcome.lead).toContain('10 分');
-    expect(ja.welcome.items2[0]).toContain('1〜3 ラウンド');
+  it('所要時間の案内は、3 ゲームとも 1 試合 1 ラウンドの実態（合計 約5分・1 試合 1〜2 分の一本勝負）に合わせる', () => {
+    // 案内の前提（ラウンド数を変えたら、この文言と README の所要時間も見直す）
+    for (const id of GAME_IDS) {
+      expect(GAMES[id].roundsPerMatch, id).toBe(1);
+      expect(GAMES[id].extraRounds ?? 0, id).toBe(0);
+    }
+    expect(ja.home.sessionNote).toContain('約5分');
+    expect(ja.welcome.lead).toBe('毎日 5 分ほど、3 つのミニゲームで戦闘力を上げよう');
+    expect(ja.welcome.items2[0]).toContain('1 試合は 1〜2 分の一本勝負');
+    // 以前の所要時間・ラウンド数の文言が残っていない
+    const texts = [ja.home.sessionNote, ja.welcome.lead, ...ja.welcome.items2];
+    expect(texts.filter((t) => /10 ?分|12〜15|1〜3 ラウンド|3 ラウンド/.test(t))).toEqual([]);
   });
 
   it('ベルトは 白帯〜黒帯二段 の 10 段（仕様書 第7節）', () => {

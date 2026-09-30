@@ -78,11 +78,11 @@ function specPower(n: number, errors: number): number {
 }
 
 describe('基本の設定', () => {
-  it('初期 n = 1、1試合 3 ラウンド＋もう1ラウンド 1 回、表層は複数', () => {
+  it('初期 n = 1、1試合 1 ラウンド（「もう1ラウンド」は無い。仕様書 v1.2）、表層は複数', () => {
     expect(game.id).toBe('combo-recall');
     expect(game.initialParams).toEqual({ n: 1 });
-    expect(game.roundsPerMatch ?? 3).toBe(3);
-    expect(game.extraRounds).toBe(1);
+    expect(game.roundsPerMatch).toBe(1);
+    expect(game.extraRounds).toBe(0);
     expect(game.surfaceCount).toBe(SURFACE_COUNT);
     expect(SURFACE_COUNT).toBeGreaterThanOrEqual(2);
   });

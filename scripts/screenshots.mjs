@@ -7,7 +7,7 @@
  * - 本番ビルド（dist/）を `vite preview` で配信して撮る（PORT、既定 4178）。すでに起動しているなら BASE_URL を渡す:
  *   BASE_URL=http://localhost:4178/brain-fighter/ npm run screenshots
  * - 画面は `?test=1&seed=1` と window.__bfTest（src/ui/test-hooks.ts）で進める。ホーム・記録などは
- *   サンプルの保存データ（sampleSave: 直近 2 週間の訓練 9 日ぶんと認定戦 4 回）を入れてから撮る。
+ *   サンプルの保存データ（sampleSave: 直近 2 週間の訓練 9 日ぶん = 3 ゲーム × 1 試合 1 ラウンドと認定戦 4 回）を入れてから撮る。
  * - 刺激の提示中の画面は、requestAnimationFrame を一時的に止めて撮る（提示は 0.3〜0.5 秒しかないため）。
  *   止めた試行の時間は記録として意味が無いが、撮影用のブラウザの中だけのデータなので構わない。
  * - PNG は撮ったあと可逆のまま圧縮し直す（フィルタと zlib の設定を選び直すだけ。画素は変えない）。
@@ -106,7 +106,8 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const round1 = (v) => Math.round(v * 10) / 10;
 
 function sampleSave(now = Date.now()) {
-  const r = rand(20260929);
+  // 乱数の種は、ダブルヒットが 8 日目にステージ 1 へ上がる推移になるものを選んだ（刺激のスクリーンショットに妨害図形が出る）
+  const r = rand(20260996);
   const noise = (w) => (r() * 2 - 1) * w;
   // 訓練した日（何日前）
   const daysAgo = [13, 12, 10, 9, 8, 6, 5, 3, 1];
@@ -129,57 +130,55 @@ function sampleSave(now = Date.now()) {
   daysAgo.forEach((ago, dayIdx) => {
     const order = orders[dayIdx % 3];
     let t = at(ago, 20, 5);
-    sessions.push({ id: `s${dayIdx}`, startedAt: new Date(t).toISOString(), endedAt: new Date(t + 10 * 60_000).toISOString(), order, done: [...order] });
+    sessions.push({ id: `s${dayIdx}`, startedAt: new Date(t).toISOString(), endedAt: new Date(t + 5 * 60_000).toISOString(), order, done: [...order] });
     for (const gameId of order) {
+      // 1 試合 = 1 ラウンド（仕様書 v1.2。3 ゲームとも）。難度はラウンド（= 試合）ごとに適応して次の日へ引き継ぐ
       const matchId = `m-${gameId}-${dayIdx}`;
-      // 1 試合のラウンド数: スタンスチェンジは 1 ラウンド（仕様書 v1.1）、ほかは 3 ラウンド
-      const roundsPerMatch = gameId === 'stance-change' ? 1 : 3;
-      for (let roundNo = 1; roundNo <= roundsPerMatch; roundNo++) {
-        t += 95_000;
-        let rec;
-        if (gameId === 'double-hit') {
-          // 試行単位の階段法の結果（ラウンド末の T）。T が下限付近で正答率 80% 以上ならステージを上げて T = 100
-          const start = { ...dh };
-          const correct = clamp(Math.round(24 * (0.77 + noise(0.07))), 0, 24);
-          dh.T = clamp(dh.T * (dh.stage === 0 ? 0.87 + noise(0.04) : 0.95 + noise(0.03)), 33, 500);
-          const power = Math.round(200 * dh.stage + (200 * Math.log(500 / dh.T)) / ln);
-          if (dh.T < 42 && correct / 24 >= 0.8 && dh.stage < 4) {
-            dh.stage += 1;
-            dh.T = 100;
-          }
-          rec = { trials: 24, correct, paramsStart: { T: round1(start.T), stage: start.stage }, paramsEnd: { T: round1(dh.T), stage: dh.stage }, power, errors: { dir: 24 - correct } };
-        } else if (gameId === 'combo-recall') {
-          const trials = 20 + n;
-          const errors = clamp(Math.round(1.6 + 0.8 * n + noise(1.6)), 0, trials);
-          const sub = clamp((5 - errors) / 3, 0, 1);
-          const power = Math.round((1000 * (n - 1 + sub)) / 9);
-          const start = n;
-          if (errors < 3) n = Math.min(9, n + 1);
-          else if (errors > 5) n = Math.max(1, n - 1);
-          rec = { trials, correct: trials - errors, paramsStart: { n: start }, paramsEnd: { n }, power, errors: { miss: Math.ceil(errors / 2), fa: Math.floor(errors / 2) } };
-        } else {
-          const acc = clamp(0.885 - 0.012 * step + noise(0.06), 0.5, 1);
-          const correct = Math.round(30 * acc);
-          const a = correct / 30;
-          const sub = clamp((a - 0.75) / 0.15, 0, 1);
-          const power = Math.round((1000 * (step - 1 + sub)) / 20);
-          const start = step;
-          if (a >= 0.9) step = Math.min(20, step + 1);
-          else if (a < 0.75) step = Math.max(1, step - 1);
-          rec = { trials: 30, correct, paramsStart: { step: start }, paramsEnd: { step }, power, errors: { switch: Math.ceil((30 - correct) / 2), repeat: Math.floor((30 - correct) / 2) } };
+      const roundNo = 1;
+      t += 100_000;
+      let rec;
+      if (gameId === 'double-hit') {
+        // 試行単位の階段法の結果（ラウンド末の T）。T が下限付近で正答率 80% 以上ならステージを上げて T = 100（1 試合で最大 1 段）
+        const start = { ...dh };
+        const correct = clamp(Math.round(24 * (0.77 + noise(0.07))), 0, 24);
+        dh.T = clamp(dh.T * (dh.stage === 0 ? 0.78 + noise(0.05) : 0.92 + noise(0.03)), 33, 500);
+        const power = Math.round(200 * dh.stage + (200 * Math.log(500 / dh.T)) / ln);
+        if (dh.T < 42 && correct / 24 >= 0.8 && dh.stage < 4) {
+          dh.stage += 1;
+          dh.T = 100;
         }
-        rounds.push({
-          id: `r-${gameId}-${dayIdx}-${roundNo}`,
-          gameId,
-          startedAt: new Date(t).toISOString(),
-          fx: 'light',
-          ...rec,
-          power: clamp(rec.power, 0, 1000),
-          matchId,
-          roundNo,
-          maxCombo: Math.min(rec.correct, 5 + Math.floor(r() * 9)),
-        });
+        rec = { trials: 24, correct, paramsStart: { T: round1(start.T), stage: start.stage }, paramsEnd: { T: round1(dh.T), stage: dh.stage }, power, errors: { dir: 24 - correct } };
+      } else if (gameId === 'combo-recall') {
+        const trials = 20 + n;
+        const errors = clamp(Math.round(1.6 + 0.8 * n + noise(1.6)), 0, trials);
+        const sub = clamp((5 - errors) / 3, 0, 1);
+        const power = Math.round((1000 * (n - 1 + sub)) / 9);
+        const start = n;
+        if (errors < 3) n = Math.min(9, n + 1);
+        else if (errors > 5) n = Math.max(1, n - 1);
+        rec = { trials, correct: trials - errors, paramsStart: { n: start }, paramsEnd: { n }, power, errors: { miss: Math.ceil(errors / 2), fa: Math.floor(errors / 2) } };
+      } else {
+        const acc = clamp(0.885 - 0.012 * step + noise(0.06), 0.5, 1);
+        const correct = Math.round(30 * acc);
+        const a = correct / 30;
+        const sub = clamp((a - 0.75) / 0.15, 0, 1);
+        const power = Math.round((1000 * (step - 1 + sub)) / 20);
+        const start = step;
+        if (a >= 0.9) step = Math.min(20, step + 1);
+        else if (a < 0.75) step = Math.max(1, step - 1);
+        rec = { trials: 30, correct, paramsStart: { step: start }, paramsEnd: { step }, power, errors: { switch: Math.ceil((30 - correct) / 2), repeat: Math.floor((30 - correct) / 2) } };
       }
+      rounds.push({
+        id: `r-${gameId}-${dayIdx}-${roundNo}`,
+        gameId,
+        startedAt: new Date(t).toISOString(),
+        fx: 'light',
+        ...rec,
+        power: clamp(rec.power, 0, 1000),
+        matchId,
+        roundNo,
+        maxCombo: Math.min(rec.correct, 5 + Math.floor(r() * 9)),
+      });
     }
   });
   const trainingDays = daysAgo.map((ago) => localDay(now - ago * DAY)).sort();
@@ -396,7 +395,10 @@ async function waitSnapshot(page, expr, timeout = 180_000) {
   );
 }
 
-/** ラウンド間の「次のラウンドへ」を押しながら結果画面まで進める（「もう1ラウンド」は選ばない） */
+/**
+ * 結果画面まで進める。3 ゲームとも 1 試合 1 ラウンド（仕様書 v1.2）なのでラウンド間の画面は出ないが、
+ * 出たときは「次のラウンドへ」を押す（「もう1ラウンド」は選ばない）。
+ */
 async function playToResult(page) {
   const any = page.locator('[data-testid="next-round"], [data-testid="to-result"], [data-testid="result"]');
   for (let guard = 0; guard < 20; guard++) {
@@ -437,7 +439,7 @@ async function run(browser) {
   await page.getByTestId('total-power').waitFor();
   await shot(page, '02-home');
 
-  // ---- ダブルヒット: 刺激の提示中 → 応答画面 → 最後まで遊んで結果画面（KO） ----
+  // ---- ダブルヒット: 刺激の提示中 → 応答画面 → 最後まで遊んで結果画面（1 ラウンドの一本勝負で KO） ----
   await page.goto(url('./?test=1&seed=1#/play/double-hit'));
   await page.getByTestId('start').waitFor();
   await installFreeze(page);

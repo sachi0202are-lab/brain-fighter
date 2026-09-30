@@ -254,18 +254,25 @@ describe('実行: 固定難度・未訓練の刺激セット・2 ラウンド（
 });
 
 describe('審査のラウンド数は訓練の試合のラウンド数と別', () => {
-  it('スタンスチェンジは訓練 1 ラウンド（roundsPerMatch: 1）でも、審査は CERT_ROUNDS = 2 ラウンド', async () => {
-    const sc = GAMES['stance-change'];
-    expect(sc.roundsPerMatch).toBe(1);
+  // ティア 1 の試行数: ダブルヒット 24、コンボ・リコール 20 + n（n = 1）、スタンスチェンジ 30
+  const TIER1_TRIALS: Record<(typeof GAME_IDS)[number], number> = { 'double-hit': 24, 'combo-recall': 21, 'stance-change': 30 };
+
+  it.each(GAME_IDS)('%s: 訓練は 1 試合 1 ラウンド（仕様書 v1.2）でも、審査は CERT_ROUNDS = 2 ラウンドでラウンド間が 1 回', async (id) => {
+    const base = GAMES[id];
+    expect(base.roundsPerMatch).toBe(1);
+    expect(base.extraRounds ?? 0).toBe(0);
     expect(CERT_ROUNDS).toBe(2);
-    const { game, calls } = spy(sc);
-    const res = await certHeadless(game, 1, { plan: allCorrect, surface: nullSurface });
+    const { game, calls } = spy(base);
+    let between = 0;
+    const res = await certHeadless(game, 1, { plan: allCorrect, surface: nullSurface, between: () => void (between += 1) });
     expect(res.rounds).toHaveLength(CERT_ROUNDS);
-    expect(res.rounds.map((r) => r.trials)).toEqual([30, 30]);
+    expect(res.rounds.map((r) => r.trials)).toEqual([TIER1_TRIALS[id], TIER1_TRIALS[id]]);
+    expect(between).toBe(1);
     expect(calls.warmup).toBe(0);
     expect(res.verdict).toEqual({ roundPassed: [true, true], passed: true });
     // 1 ラウンドだけでは合格にならない（2 ラウンドとも必要）
-    expect(judgeCert(sc, 1, [{ trials: 30, correct: 30, accuracy: 1, errors: {} }]).passed).toBe(false);
+    const n = TIER1_TRIALS[id];
+    expect(judgeCert(base, 1, [{ trials: n, correct: n, accuracy: 1, errors: {} }]).passed).toBe(false);
   });
 });
 

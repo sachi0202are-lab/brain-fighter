@@ -2,6 +2,8 @@
  * 演出プリセット同値性テスト（仕様書 9.1 MUST・受け入れ基準 1）。
  * 同じシード・同じ入力で off / light / full を実行し、試行ログ（試行数・提示時間・刺激間隔・応答期限・
  * 標的比率が読み取れる刺激）が完全に一致することを確かめる。演出には本物の HUD（skin/hud.ts）を購読させる。
+ * 1 試合 = 1 ラウンド（仕様書 v1.2）なので、ゲームごとに 3 試合を続けて遊ぶ（難度と敵 HP の直近の正答率は
+ * 試合をまたいで引き継ぐ。アプリと同じ）。
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { GAMES } from '../games';
@@ -24,6 +26,9 @@ beforeAll(() => {
 });
 afterAll(() => restoreDom());
 
+/** ゲームごとに続けて遊ぶ試合の数 */
+const MATCHES = 3;
+
 interface Played {
   logs: TrialLog[];
   rounds: { kind: string; trials: number; correct: number; paramsEnd: Record<string, number>; power: number }[];
@@ -39,46 +44,50 @@ async function play(game: AnyGameModule, fx: FxPreset, seed: number): Promise<Pl
   const logs: TrialLog[] = [];
   const rounds: Played['rounds'] = [];
   const recent: number[] = [];
-  await runMatch(
-    {
-      game,
-      params: game.initialParams,
-      surface: 0,
-      previousPower: 0,
-      seedFor: (kind, n) => hashSeed(seed, game.id, kind, n),
-    },
-    {
-      runRound: async (req) => {
-        const sched = new VirtualScheduler();
-        const runner = new RoundRunner({ game, trials: req.trials, params: req.params, options: req.options, adaptive: req.adaptive, scheduler: sched });
-        hud.setInfo({ label: `R${req.roundNo}`, level: game.enemyLevel(req.params), enemyName: 'X', warmup: req.kind === 'warmup' });
-        const detach = hud.attach(runner.events, { trials: req.trials.length, enemyHp: req.kind === 'round' ? enemyHp(req.trials.length, recent) : null });
-        // Full ではさらに「行儀の悪い」購読者も付ける（例外を投げ、状態を覗く）
-        const offs =
-          fx === 'full'
-            ? [
-                runner.events.onAny(() => {
-                  runner.snapshot();
-                  throw new Error('noisy skin');
-                }),
-              ]
-            : [];
-        runner.events.on('judged', () => feedbackShown++);
-        try {
-          return await driveRunner(runner, sched, { delayMs: (i) => 120 + (i % 3) * 90 });
-        } finally {
-          detach();
-          for (const off of offs) off();
-        }
+  let params = game.initialParams;
+  for (let m = 1; m <= MATCHES; m++) {
+    const res = await runMatch(
+      {
+        game,
+        params,
+        surface: 0,
+        previousPower: 0,
+        seedFor: (kind, n) => hashSeed(seed, game.id, m, kind, n),
       },
-      onRoundDone: (d) => {
-        logs.push(...toTrialLogs(`${d.summary.kind}-${d.summary.roundNo}`, d.summary.results));
-        rounds.push({ kind: d.summary.kind, trials: d.summary.trials, correct: d.summary.correct, paramsEnd: d.paramsEnd, power: d.power });
-        if (d.summary.kind === 'round') recent.push(d.summary.accuracy);
+      {
+        runRound: async (req) => {
+          const sched = new VirtualScheduler();
+          const runner = new RoundRunner({ game, trials: req.trials, params: req.params, options: req.options, adaptive: req.adaptive, scheduler: sched });
+          hud.setInfo({ label: `M${m}R${req.roundNo}`, level: game.enemyLevel(req.params), enemyName: 'X', warmup: req.kind === 'warmup' });
+          const detach = hud.attach(runner.events, { trials: req.trials.length, enemyHp: req.kind === 'round' ? enemyHp(req.trials.length, recent) : null });
+          // Full ではさらに「行儀の悪い」購読者も付ける（例外を投げ、状態を覗く）
+          const offs =
+            fx === 'full'
+              ? [
+                  runner.events.onAny(() => {
+                    runner.snapshot();
+                    throw new Error('noisy skin');
+                  }),
+                ]
+              : [];
+          runner.events.on('judged', () => feedbackShown++);
+          try {
+            return await driveRunner(runner, sched, { delayMs: (i) => 120 + (i % 3) * 90 });
+          } finally {
+            detach();
+            for (const off of offs) off();
+          }
+        },
+        onRoundDone: (d) => {
+          logs.push(...toTrialLogs(`${m}-${d.summary.kind}-${d.summary.roundNo}`, d.summary.results));
+          rounds.push({ kind: d.summary.kind, trials: d.summary.trials, correct: d.summary.correct, paramsEnd: d.paramsEnd, power: d.power });
+          if (d.summary.kind === 'round') recent.push(d.summary.accuracy);
+        },
+        askExtra: async () => true,
       },
-      askExtra: async () => true,
-    },
-  );
+    );
+    params = res.paramsEnd;
+  }
   hud.destroy();
   return { logs, rounds, sounds, feedbackShown };
 }
@@ -93,6 +102,7 @@ describe.each(GAME_IDS)('演出プリセット同値性: %s', (id) => {
       for (const fx of FX_PRESETS) results.set(fx, await play(game, fx, 20260929));
       const off = results.get('off')!;
       expect(off.logs.length).toBeGreaterThan(0);
+      expect(off.rounds).toHaveLength(MATCHES * (game.roundsPerMatch ?? 3));
       for (const fx of ['light', 'full'] as const) {
         const other = results.get(fx)!;
         // 試行数

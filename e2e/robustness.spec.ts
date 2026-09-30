@@ -47,7 +47,7 @@ test('難度・補助・スキップを選ぶ操作が無い（受け入れ基�
     await expectNoDifficultyControls(page, `初回の案内 ${step} / 3`);
     if (step < 3) await page.getByTestId('welcome-next').click();
   }
-  // ゲームの画面（ラウンド中）: 応答ボタンと中断だけ（ラウンド間・結果画面はスモークテストで調べる）
+  // ゲームの画面（ラウンド中）: 応答ボタンと中断だけ（結果画面はスモークテスト、ラウンド間の画面は認定戦にだけ残るので cert.spec.ts で調べる）
   await page.goto('./?test=1#/play/stance-change');
   await page.getByTestId('start').click();
   await expect.poll(() => page.evaluate(() => window.__bfTest.state().running)).toBe(true);
@@ -61,23 +61,4 @@ test('設定の「このアプリについて」に免責文がそのまま出�
   await expect(page.getByTestId('disclaimer')).toHaveText(
     '本アプリは娯楽・自己記録を目的とするゲームです。日常生活の能力向上や疾病の予防・治療を目的・保証するものではありません。医療機器ではありません。',
   );
-});
-
-test('コンボ・リコールの「もう1ラウンド」で4ラウンド目を遊べる', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'desktop', 'デスクトップのプロジェクトだけで実行する');
-  test.setTimeout(15 * 60_000);
-  await page.goto('./?test=1&seed=5#/play/combo-recall');
-  await page.evaluate(() => window.__bfTest.autoplay({ delayMs: 60 }));
-  await page.getByTestId('start').click();
-  const any = page.locator('[data-testid="next-round"], [data-testid="extra-round"]');
-  for (let k = 0; k < 10; k++) {
-    await any.first().waitFor({ state: 'visible', timeout: 120_000 });
-    if (await page.getByTestId('extra-round').isVisible()) break;
-    await page.getByTestId('next-round').click().catch(() => {});
-  }
-  await page.getByTestId('extra-round').click();
-  await expect(page.getByTestId('result')).toBeVisible({ timeout: 120_000 });
-  await expect(page.locator('.round-item')).toHaveCount(4);
-  const rounds = await page.evaluate(() => window.__bfTest.save().rounds.filter((r) => r.kind !== 'warmup').length);
-  expect(rounds).toBe(4);
 });

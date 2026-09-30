@@ -113,7 +113,7 @@ test('埋め込みページに X-Frame-Options / frame-ancestors が無く、PWA
   expect(main).toMatch(/registerSW/);
 });
 
-test('ブログ記事の iframe の中で1ラウンド遊べる（記録は iframe 側に残る）', async ({ page, context }, testInfo) => {
+test('ブログ記事の iframe の中で1試合（1 ラウンド）遊べる（記録は iframe 側に残る）', async ({ page, context }, testInfo) => {
   test.setTimeout(8 * 60_000);
   const errors = collectErrors(page);
   await routeHosts(context, testInfo.project.use.baseURL as string, '?test=1&seed=5#/play/double-hit');
@@ -123,10 +123,8 @@ test('ブログ記事の iframe の中で1ラウンド遊べる（記録は ifra
   const frame = await embedFrame(page);
   await frame.evaluate(() => window.__bfTest.autoplay({ delayMs: 60 }));
   await fl.getByTestId('start').click();
-  await expect(fl.getByTestId('intermission')).toBeVisible({ timeout: 240_000 });
-  const rounds = await frame.evaluate(() => window.__bfTest.save().rounds.filter((r) => r.kind !== 'warmup').length);
-  expect(rounds).toBe(1);
-  // 刺激領域と応答ボタンが iframe の表示範囲に収まっている
+  await expect.poll(() => frame.evaluate(() => window.__bfTest.state().running)).toBe(true);
+  // ラウンド中: 刺激領域と応答ボタンが iframe の表示範囲に収まっている
   const box = await frame.evaluate(() => {
     const c = (document.querySelector('canvas.stim') as HTMLCanvasElement).getBoundingClientRect();
     const b = (document.querySelector('.resp-band') as HTMLElement).getBoundingClientRect();
@@ -137,6 +135,12 @@ test('ブログ記事の iframe の中で1ラウンド遊べる（記録は ifra
   expect(box.top).toBeGreaterThanOrEqual(0);
   expect(box.size).toBeGreaterThanOrEqual(160);
   expect(box.bandBottom).toBeLessThanOrEqual(box.h + 1);
+  // 1 試合 = 1 ラウンド（仕様書 v1.2）: ラウンド間の画面を出さずに結果画面へ進み、記録は iframe 側に 1 本
+  await fl.locator('[data-testid="next-round"], [data-testid="to-result"], [data-testid="result"]').first().waitFor({ state: 'visible', timeout: 240_000 });
+  await expect(fl.getByTestId('result')).toBeVisible();
+  await expect(fl.getByTestId('result').locator('.round-item .round-no')).toHaveText('一本勝負');
+  const rounds = await frame.evaluate(() => window.__bfTest.save().rounds.filter((r) => r.kind !== 'warmup').length);
+  expect(rounds).toBe(1);
   expect(errors).toEqual([]);
 });
 

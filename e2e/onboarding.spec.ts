@@ -15,12 +15,12 @@ test('初回は 3 画面の案内 → 演出を選んでホームへ。2 回目�
   const w = page.getByTestId('welcome');
   await expect(w).toHaveAttribute('data-step', '1');
   await expect(w).toContainText('1 / 3');
-  await expect(w).toContainText('毎日 10 分ほど、3 つのミニゲームで戦闘力を上げよう');
+  await expect(w).toContainText('毎日 5 分ほど、3 つのミニゲームで戦闘力を上げよう');
   await expect(w).toContainText(DISCLAIMER);
   await page.getByTestId('welcome-next').click();
   await expect(w).toHaveAttribute('data-step', '2');
-  // 1 試合のラウンド数はゲームで違う（スタンスチェンジは 1 ラウンド）
-  await expect(w).toContainText('1 試合ずつ遊びます（1 試合は 1〜3 ラウンド）');
+  // 3 ゲームとも 1 試合 1 ラウンド（仕様書 v1.2。上帯の「一本勝負」と同じ言い方）
+  await expect(w).toContainText('1 試合ずつ遊びます（1 試合は 1〜2 分の一本勝負）');
   await page.getByTestId('welcome-next').click();
   await expect(w).toHaveAttribute('data-step', '3');
   // 演出の選択（既定 Light）。もどっても選び直せる

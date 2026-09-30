@@ -3,24 +3,33 @@
  * - 条件（訓練 3 日以上・前回から 7 日以上）を満たすまでホームにも審査画面にも出ない。
  * - 固定難度（試行ごとの提示時間が変わらない）・未訓練セット・2 ラウンド・最小の演出。
  * - 合格でベルト +1、不合格で変化なし。訓練のラウンド・訓練日・戦闘力には数えない。
+ * - 訓練の試合は 3 ゲームとも 1 ラウンド（仕様書 v1.2）なので、ラウンド間の画面が出るのは認定戦の 2 ラウンドの間だけ。
+ *   その表示（最小の演出・次のラウンドのルールの一言・難度の操作が無いこと = 受け入れ基準 2）もここで確かめる。
  * 保存データは localStorage に直接入れて条件を作る（seedSave）。
  */
 import { expect, test, type Page } from '@playwright/test';
-import { collectErrors, saveData, seedSave, type BfSave } from './helpers';
+import { collectErrors, expectNoDifficultyControls, saveData, seedSave, type BfSave } from './helpers';
 
-/** 審査の開始前の画面で「スタート」を押し、ラウンド間は「次のラウンドへ」で進め、合否（またはゲームごとの結果）が出るまで待つ */
-async function playCert(page: Page): Promise<void> {
+/**
+ * 審査の開始前の画面で「スタート」を押し、ラウンド間は「次のラウンドへ」で進め、合否（またはゲームごとの結果）が出るまで待つ。
+ * 戻り値は通ったラウンド間の画面の数（2 ラウンドなので 1）。onIntermission はラウンド間の画面が出るたびに、閉じる前に呼ばれる。
+ */
+async function playCert(page: Page, opts: { onIntermission?: () => Promise<void> } = {}): Promise<number> {
   await page.getByTestId('cert-ready').waitFor({ state: 'visible' });
   await page.getByTestId('start').click();
   const any = page.locator('[data-testid="next-round"], [data-testid="cert-game-result"], [data-testid="cert-summary"]');
+  let between = 0;
   for (let guard = 0; guard < 10; guard++) {
     await any.first().waitFor({ state: 'visible', timeout: 180_000 });
-    if (await page.getByTestId('cert-summary').isVisible()) return;
-    if (await page.getByTestId('cert-game-result').isVisible()) return;
+    if (await page.getByTestId('cert-summary').isVisible()) return between;
+    if (await page.getByTestId('cert-game-result').isVisible()) return between;
+    between += 1;
+    await opts.onIntermission?.();
     await page.getByTestId('next-round').click().catch(() => {
       /* 10 秒で自動的に閉じた直後 */
     });
   }
+  return between;
 }
 
 const save = (page: Page): Promise<BfSave> => page.evaluate(() => window.__bfTest.save());
@@ -57,7 +66,24 @@ test('条件を満たしたゲームだけ挑める。全問正解で合格し�
   // 演出は最小（HP バー・コンボなし）
   await expect(page.locator('.hud-player')).toBeHidden();
   await expect(page.locator('.hud-combo')).toBeHidden();
-  await playCert(page);
+  // ラウンド間の画面（訓練の試合には無くなり、認定戦にだけ残る）: 文字だけの最小の表示で、難度の操作が無い
+  const between = await playCert(page, {
+    onIntermission: async () => {
+      const panel = page.getByTestId('intermission');
+      await expect(panel).toBeVisible();
+      await expect(panel.locator('h2')).toHaveText('ラウンド 1 終了');
+      await expect(panel).toContainText('次のラウンドも同じ難度です。');
+      await expect(panel.getByTestId('round-intro')).toBeVisible();
+      await expect(panel.locator('.countdown')).toHaveCount(1);
+      await expect(panel.locator('canvas')).toHaveCount(0);
+      await expect(panel.locator('.outcome, .telop, [data-testid="special"]')).toHaveCount(0);
+      // 合否・正答率はラウンド間では出さない（最後にまとめて）
+      await expect(panel).not.toContainText('%');
+      await expect(page.locator('.hud-round')).toHaveText('審査 ラウンド 1/2');
+      await expectNoDifficultyControls(page, '認定戦のラウンド間');
+    },
+  });
+  expect(between).toBe(1);
   await expect(page.getByTestId('cert-summary')).toBeVisible();
   const verdict = page.getByTestId('cert-verdict');
   await expect(verdict).toHaveAttribute('data-passed', 'true');

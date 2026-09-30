@@ -4,7 +4,9 @@
  * 1試行: 注視点 500 ms → 刺激 T ms（中央の構え＋周辺の火花＋妨害）→ マスク 150 ms
  *        → 応答（構えと火花の方向。順番は自由、5 秒まで）→ フィードバック 300 ms → 試行間隔 500 ms。
  * 両方正解で正答。片方だけ正解は誤答（内訳 kind: stance / dir / both / timeout）。
- * 適応: 試行単位の重み付き階段法（T）＋ラウンド末のステージ昇格（params.ts）。1ラウンド 24 試行、1試合 3 ラウンド。
+ * 適応: 試行単位の重み付き階段法（T）＋ラウンド末のステージ昇格（params.ts）。
+ * 1試合 = 24 試行 × 1 ラウンド（仕様書 v1.2。ユーザーのフィードバックで 3 ラウンドから短縮）。ステージ昇格は
+ * 「そのラウンド」で判定するので 1 試合で最大 1 段。T の試行単位の適応はそのまま（試合をまたいで引き継ぐ）。
  *
  * 部品: params.ts（難度・適応・戦闘力・認定戦）、trials.ts（試行列・判定）、layout.ts（応答ボタン・キー・タップ）、
  *       render.ts（描画）。
@@ -85,6 +87,17 @@ export function roundMetrics(round: RoundSummary<DhParams, DhTrial>): Record<str
   };
 }
 
+/**
+ * 汎用の一言（tips）の番号 0..count-1。
+ * 1試合 = 1 ラウンドなのでラウンド番号だけで順に替えると毎回同じ一言になる。正答数も足して、
+ * 試合ごとに違う一言が出やすいようにする（ラウンド番号が 1 つ進めば次の一言、という順番はそのまま）。
+ */
+export function genericTipIndex(round: Pick<RoundSummary<DhParams, DhTrial>, 'roundNo' | 'correct'>, count: number): number {
+  if (count <= 0) return 0;
+  const k = Math.max(1, round.roundNo) - 1 + Math.max(0, round.correct);
+  return k % count;
+}
+
 /** ラウンド末の一言（誤りの内訳から、方略に向けた一言を選ぶ。能力ラベルは使わない） */
 export function roundTip(round: RoundSummary<DhParams, DhTrial>): string {
   const e = round.errors;
@@ -97,13 +110,14 @@ export function roundTip(round: RoundSummary<DhParams, DhTrial>): string {
   if (stanceErr >= 2 && stanceErr > dirErr) return p.stances >= 3 ? text.tipStance3 : text.tipStance;
   if (dirErr >= 2 && dirErr > stanceErr) return p.distractors > 0 ? text.tipDirDistractors : text.tipDir;
   if (round.accuracy >= 0.85) return text.tipSteady;
-  const tips = text.tips;
-  return tips[(((round.roundNo - 1) % tips.length) + tips.length) % tips.length] as string;
+  return text.tips[genericTipIndex(round, text.tips.length)] as string;
 }
 
 export const game: GameModule<DhParams, DhTrial> = {
   id: 'double-hit',
   initialParams: INITIAL_PARAMS,
+  /** 1試合 = 1 ラウンド（仕様書 v1.2）。認定戦は src/cert/ の CERT_ROUNDS（2）で、この値とは別 */
+  roundsPerMatch: 1,
   surfaceCount: SURFACES.length,
 
   restoreParams: restoreDhParams,

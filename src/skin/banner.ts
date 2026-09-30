@@ -28,7 +28,7 @@ export function outcomeBanner(o: RoundOutcome, koNext: number | null): HTMLEleme
 /**
  * 結果画面の見出し: KO と PERFECT の数（Light / Full）。どちらも 0 なら出さない
  * （判定負けは各ラウンドの行に情報として出すだけで、見出しにはしない）。
- * 1 ラウンドだけの試合（スタンスチェンジ）は数を付けず「KO」「PERFECT」だけ（「KO × 1」にしない）。
+ * 1 ラウンドだけの試合（仕様書 v1.2 からは 3 ゲームとも）は数を付けず「KO」「PERFECT」だけ（「KO × 1」にしない）。
  */
 export function outcomeHeadline(outcomes: readonly (RoundOutcome | null)[]): HTMLElement | null {
   const ko = outcomes.filter((o) => o === 'ko').length;

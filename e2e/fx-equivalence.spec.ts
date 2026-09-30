@@ -8,6 +8,8 @@ import { expect, test } from '@playwright/test';
 import { MATCH_ROUNDS, playMatch, type BfTestLogRound } from './helpers';
 
 const FX = ['off', 'light', 'full'] as const;
+/** 1 ラウンドの試行数（初回なのでコンボ・リコールは n = 1 の 20 + 1） */
+const TRIALS = { 'double-hit': 24, 'combo-recall': 21, 'stance-change': 30 } as const;
 
 function normalize(logs: BfTestLogRound[]): unknown {
   return logs.map((r) => ({
@@ -23,7 +25,7 @@ function normalize(logs: BfTestLogRound[]): unknown {
 for (const gameId of ['double-hit', 'combo-recall', 'stance-change'] as const) {
   test(`off / light / full で試行ログが一致する（${gameId}）`, async ({ browser }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'デスクトップのプロジェクトだけで実行する');
-    test.setTimeout(15 * 60_000);
+    test.setTimeout(8 * 60_000);
     const baseURL = testInfo.project.use.baseURL;
     const runs = await Promise.all(
       FX.map(async (fx) => {
@@ -32,18 +34,21 @@ for (const gameId of ['double-hit', 'combo-recall', 'stance-change'] as const) {
         await page.goto(`./?test=1&seed=42&fx=${fx}#/play/${gameId}`);
         await expect(page.locator(`.play.fx-${fx}`)).toBeVisible();
         await page.evaluate(() => window.__bfTest.autoplay({ delayMs: 60 }));
-        await playMatch(page);
+        const between = await playMatch(page);
         const out = await page.evaluate(() => ({ logs: window.__bfTest.logs(), frameMs: window.__bfTest.frameMs() }));
         await ctx.close();
-        return { fx, ...out };
+        return { fx, between, ...out };
       }),
     );
     const [off, ...others] = runs;
-    // 1 試合のラウンド（「もう1ラウンド」は選ばない）: ダブルヒット・コンボ・リコールは 3 本、
-    // スタンスチェンジは 1 本だけでウォームアップも無い（以前はウォームアップ 12 試行＋3 ラウンドの 4 本・102 試行）
+    // 1 試合のラウンド: 3 ゲームとも 1 本だけ（仕様書 v1.2。ウォームアップも「もう1ラウンド」も無く、ラウンド間の画面を通らない）
+    // （v1.1 まではダブルヒット・コンボ・リコールが 3 本、その前はスタンスチェンジもウォームアップ＋3 本だった）
     const rounds = Array.from({ length: MATCH_ROUNDS[gameId] }, (_, k) => `round:${k + 1}`);
-    for (const r of runs) expect(r.logs.map((x) => `${x.kind}:${x.roundNo}`), `${r.fx} のラウンド`).toEqual(rounds);
-    if (gameId === 'stance-change') expect(off!.logs.map((x) => x.trials.length)).toEqual([30]);
+    for (const r of runs) {
+      expect(r.logs.map((x) => `${x.kind}:${x.roundNo}`), `${r.fx} のラウンド`).toEqual(rounds);
+      expect(r.between, `${r.fx} のラウンド間の画面の数`).toBe(MATCH_ROUNDS[gameId] - 1);
+    }
+    expect(off!.logs.map((x) => x.trials.length)).toEqual(rounds.map(() => TRIALS[gameId]));
     for (const r of others) {
       expect(r.frameMs, `${r.fx} のフレーム間隔`).toBeCloseTo(off!.frameMs, 6);
       expect(normalize(r.logs), `${r.fx} と off の試行ログ`).toEqual(normalize(off!.logs));
