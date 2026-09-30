@@ -9,6 +9,7 @@
  * 仕様書 v1.2 から 3 ゲームとも 1 試合 1 ラウンドなので、日次の試合ではラウンド間の画面が出ない（Light のラウンド間の
  * ファイターと KO ロゴ、Full の必殺演出と技名テロップは、日次の試合では出番が無い）。ここでは 3 ゲームを 1 つずつ
  * 別のプリセットで最後まで遊び、「ラウンド間の画面なしで結果へ」「上帯と結果画面は『一本勝負』、見出しは × 1 を付けない」を確かめる。
+ * 判定負けの試合（Light）では、結果画面のカードに「次は ◯ 問正解で KO」が情報として 1 行だけ出る（KO / PERFECT・Off では出ない）。
  * - ラウンド間の演出の安全性（必殺演出は一度だけ動いて止まり点滅しない・背景は静的・CSS の点滅の上限）は Vitest の
  *   src/skin/effects.test.ts、1 ラウンドの試合でラウンド間を呼ばないことは src/engine/match.test.ts と各ゲームの match.test.ts で確かめる。
  * - 残っている唯一のラウンド間の画面（認定戦の 2 ラウンドの間。演出は最小）は cert.spec.ts で確かめる。
@@ -20,14 +21,17 @@ import { collectErrors } from './helpers';
 type Fx = 'off' | 'light' | 'full';
 type GameId = 'double-hit' | 'combo-recall' | 'stance-change';
 
-/** 開始して、自動プレイで最後まで答えさせる（wrongAt の試行だけ誤る。null なら全問正解） */
-async function start(page: Page, fx: Fx, gameId: GameId, wrongAt: number | null = null): Promise<void> {
+/** 自動プレイで誤る試行（at: その 1 試行だけ、odd: 奇数番目の試行すべて）。省略すると全問正解 */
+type Wrong = { at?: number; odd?: boolean };
+
+/** 開始して、自動プレイで最後まで答えさせる */
+async function start(page: Page, fx: Fx, gameId: GameId, wrong: Wrong = {}): Promise<void> {
   await page.goto(`./?test=1&seed=21&fx=${fx}#/play/${gameId}`);
   await expect(page.locator(`.play.fx-${fx}`)).toBeVisible();
   await page.evaluate((w) => {
     window.__bfTest.startFxAudit();
-    window.__bfTest.autoplay({ delayMs: 60, correct: (i) => i !== w });
-  }, wrongAt ?? -1);
+    window.__bfTest.autoplay({ delayMs: 60, correct: (i) => !(i === w.at || (w.odd === true && i % 2 === 1)) });
+  }, wrong);
   await page.getByTestId('start').click();
   // 上帯のラウンドは「ラウンド 1/1」ではなく「一本勝負」
   await expect(page.locator('.hud-round')).toHaveText('一本勝負');
@@ -83,6 +87,7 @@ test.describe('演出プリセット', () => {
     // 結果画面にも KO / PERFECT の見出し・ロゴ・ファイターを出さない
     await expect(page.getByTestId('result-headline')).toHaveCount(0);
     await expect(result.locator('.round-outcome')).toHaveCount(0);
+    await expect(result.getByTestId('ko-next')).toHaveCount(0);
     await expect(result.locator('canvas')).toHaveCount(0);
     // 戦闘力: 全問正解で T = 300 × 0.93^24 ≒ 52.6 ms（ステージ 0）→ round(200 × ln(500 / 52.6) / ln(500 / 33)) = 166
     await expect(powerText(page)).toHaveText('0 → 166（+166）');
@@ -93,7 +98,7 @@ test.describe('演出プリセット', () => {
   test('Light（コンボ・リコール）: 静的な HP バー。KO してもラウンドは最後まで続き、結果画面は「KO」（× 1 なし）', async ({ page }) => {
     const errors = collectErrors(page);
     // 6 試行目（i = 5）だけ誤る → 21 試行中 20 正答（KO。初回の敵 HP は ceil(21 × 0.75) = 16）
-    await start(page, 'light', 'combo-recall', 5);
+    await start(page, 'light', 'combo-recall', { at: 5 });
     await expect(page.locator('.hud-player')).toBeVisible();
     await expect(page.locator('.hud-enemy')).toBeVisible();
     await expect(page.locator('.hud-combo')).toBeHidden();
@@ -110,6 +115,7 @@ test.describe('演出プリセット', () => {
     const result = page.getByTestId('result');
     await expect(page.getByTestId('result-headline')).toHaveText('KO');
     await expect(result.locator('.round-item .round-outcome')).toHaveText('KO');
+    await expect(result.getByTestId('ko-next')).toHaveCount(0);
     // 静止画のファイター（必殺演出と技名テロップはラウンド間だけのもので、結果画面には出ない）
     await expect(result.locator('canvas.fighters')).toHaveCount(1);
     await expect(result.getByTestId('special')).toHaveCount(0);
@@ -119,6 +125,24 @@ test.describe('演出プリセット', () => {
     const save = await page.evaluate(() => window.__bfTest.save());
     expect(save.rounds.map((r) => [r.gameId, r.kind ?? 'round', r.trials, r.correct, r.power])).toEqual([['combo-recall', 'round', 21, 20, 111]]);
     expect(save.games['combo-recall']!.state.n).toBe(2);
+    await expectSafeAudit(page);
+    expect(errors).toEqual([]);
+  });
+
+  test('判定負け（Light・ダブルヒット）: 見出しにはせず、結果画面のカードに「次は ◯ 問正解で KO」を情報として 1 行だけ出す', async ({ page }) => {
+    const errors = collectErrors(page);
+    // 奇数番目の試行を誤る → 24 試行中 12 正答（初回の敵 HP は ceil(24 × 0.75) = 18 なので判定負け）
+    await start(page, 'light', 'double-hit', { odd: true });
+    await expectResultWithoutIntermission(page, 'double-hit', 24);
+    const result = page.getByTestId('result');
+    await expect(page.getByTestId('result-headline')).toHaveCount(0);
+    await expect(result.locator('.round-item .round-outcome')).toHaveText('判定負け');
+    // 次の試合の敵 HP の見込み: 直近の正答率 50% → p_cpu = max(0.50 − 0.05, 0.65) = 0.65 → ceil(24 × 0.65) = 16
+    await expect(result.getByTestId('ko-next')).toHaveCount(1);
+    await expect(result.getByTestId('ko-next')).toHaveText('次は 16 問正解で KO');
+    await expect(result.locator('canvas.fighters')).toHaveCount(1);
+    const save = await page.evaluate(() => window.__bfTest.save());
+    expect(save.rounds.map((r) => [r.gameId, r.kind ?? 'round', r.trials, r.correct])).toEqual([['double-hit', 'round', 24, 12]]);
     await expectSafeAudit(page);
     expect(errors).toEqual([]);
   });
@@ -134,6 +158,7 @@ test.describe('演出プリセット', () => {
     const result = page.getByTestId('result');
     await expect(page.getByTestId('result-headline')).toHaveText('PERFECT');
     await expect(result.locator('.round-item .round-outcome')).toHaveText('PERFECT');
+    await expect(result.getByTestId('ko-next')).toHaveCount(0);
     await expect(result.locator('canvas.fighters')).toHaveCount(1);
     await expect(result.getByTestId('special')).toHaveCount(0);
     await expect(result.locator('.telop')).toHaveCount(0);

@@ -104,6 +104,8 @@ describe('戦闘力の集計', () => {
     ];
     expect(recentAccuracies(data([m1]), 'double-hit')).toEqual([1]);
     expect(hpAfter([m1])).toBe(21); // p_cpu = min(1 − 0.05, 0.85) = 0.85 → ceil(20.4)
+    // 初回が判定負け（12 / 24）なら、次の試合（結果画面の「次は ◯ 問正解で KO」）は p_cpu = max(0.5 − 0.05, 0.65) → ceil(15.6) = 16
+    expect(hpAfter([dh(20, 12)])).toBe(16);
     expect(recentAccuracies(data([m1, ...others, m2]), 'double-hit')).toEqual([1, 0.75]);
     expect(hpAfter([m1, ...others, m2])).toBe(20); // 平均 0.875 → p_cpu 0.825 → ceil(19.8)
     // 4 試合目以降は直近 3 試合だけ（1 試合目は外れる）

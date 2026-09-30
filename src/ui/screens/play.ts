@@ -251,6 +251,9 @@ export function mountPlay(app: App, root: HTMLElement, gameId: string): () => vo
       bestBefore,
       level: currentLevel,
       tip: last ? (game.roundTip?.(last.summary) ?? '') : '',
+      // 判定負けの「次は ◯ 問正解で KO」用。保存済みのこの試合まで入れた直近の正答率で、次の試合の敵 HP を見込む
+      // （同じ試行数で計算する。コンボ・リコールは次の n で試行数が変わることがあるので概算。ラウンド間の画面と同じ）
+      nextEnemyHp: last ? enemyHp(last.summary.trials, recentAccuracies(app.store.data, gid)) : null,
       nextGame: session ? (session.order.find((g) => !session.done.includes(g)) ?? null) : null,
       sessionDone: session ? session.order.every((g) => session.done.includes(g)) : false,
     };

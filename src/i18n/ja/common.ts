@@ -67,6 +67,7 @@ export const common = {
     ko: 'KO',
     perfect: 'PERFECT',
     decision: '判定負け',
+    /** 判定負けの一言（煽らず情報だけ。仕様書 9.3）。ラウンド間の画面と、1 ラウンドの試合の結果画面に出す */
     koNext: (n: number): string => `次は ${n} 問正解で KO`,
     count: (label: string, n: number): string => `${label} × ${n}`,
   },

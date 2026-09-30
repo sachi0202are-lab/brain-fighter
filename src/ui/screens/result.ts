@@ -1,9 +1,10 @@
 /**
  * 結果画面: KO / PERFECT / 判定、正答率、最大コンボ、戦闘力の増減、自己ベスト差、一言。「次のゲームへ」「ホームへ」
  * 1 ラウンドだけの試合（仕様書 v1.2 からは 3 ゲームとも）は、ラウンドを「一本勝負」、見出しを「ラウンドの結果」「KO」（× 1 を付けない）で出す。
+ * 判定負けのときは、ラウンドのカードに「次は ◯ 問正解で KO」を情報として 1 行だけ出す（Light / Full。見出しにはしない）。
  */
 import { gameText, ja } from '../../i18n/ja';
-import { fightersCanvas, outcomeHeadline, outcomeText } from '../../skin/banner';
+import { fightersCanvas, koNextNote, outcomeHeadline, outcomeText } from '../../skin/banner';
 import { SKIN_FEATURES } from '../../skin/presets';
 import '../../skin/skin.css';
 import type { App } from '../app';
@@ -65,6 +66,7 @@ export function mountResult(app: App, root: HTMLElement): () => void {
         { class: 'card' },
         h('h2', { class: 'card-title' }, v.rounds.length === 1 ? ja.result.singleRoundHeading : ja.result.roundsHeading),
         rounds,
+        features.outcomeLogo ? koNextNote(v.rounds.map((r) => r.outcome), v.nextEnemyHp ?? null) : null,
       ),
       h(
         'section',

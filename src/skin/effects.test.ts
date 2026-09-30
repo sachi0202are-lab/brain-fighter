@@ -4,11 +4,12 @@
  * - Full の背景は静的（アニメーション無し・レベルから決定的）。
  * - CSS: 繰り返すアニメーションは 1 周 1/3 秒以上（点滅 3 回/秒以下）。刺激領域（.stim）には動きを付けない。
  * - 結果画面の見出しは KO / PERFECT の数だけ（判定負けは見出しにしない。1 ラウンドの試合は数を付けない）。
+ * - 1 ラウンドの試合の判定負けは、結果画面に「次は ◯ 問正解で KO」を情報として 1 行だけ出す（KO / PERFECT では出さない）。
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { installFakeDocument, type FakeElement } from '../test/fake-dom';
 import { BACKDROP_VARIANTS, backdropSvg, backdropUrl } from './backdrop';
-import { outcomeHeadline } from './banner';
+import { koNextNote, outcomeHeadline } from './banner';
 import { SPECIAL_IMPACT_MS, SPECIAL_MS, specialFrame } from './special';
 
 describe('必殺演出（ラウンド間だけ・一度きり）', () => {
@@ -76,6 +77,22 @@ describe('結果画面の見出し', () => {
     expect(perfect.children.map((c) => c.textContent)).toEqual(['PERFECT']);
     expect(outcomeHeadline(['decision'])).toBeNull();
     expect(outcomeHeadline([null])).toBeNull();
+  });
+
+  it('判定負けの「次は ◯ 問正解で KO」は、1 ラウンドの試合で判定負けのときだけ出す（仕様書 9.3: 煽らず情報だけ）', () => {
+    const el = koNextNote(['decision'], 16) as unknown as FakeElement;
+    expect(el.textContent).toBe('次は 16 問正解で KO');
+    expect(el.className).toBe('ko-next');
+    expect(el.dataset.testid).toBe('ko-next');
+    // KO / PERFECT、記録なし（null）、見込みが無いときは出さない
+    expect(koNextNote(['ko'], 16)).toBeNull();
+    expect(koNextNote(['perfect'], 16)).toBeNull();
+    expect(koNextNote([null], 16)).toBeNull();
+    expect(koNextNote(['decision'], null)).toBeNull();
+    // ラウンドが複数ある試合では出さない（判定負けの見込みはラウンド間の画面に出る）
+    expect(koNextNote(['ko', 'decision'], 16)).toBeNull();
+    expect(koNextNote(['decision', 'decision', 'decision'], 16)).toBeNull();
+    expect(koNextNote([], 16)).toBeNull();
   });
 });
 

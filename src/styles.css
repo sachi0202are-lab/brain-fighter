@@ -791,6 +791,12 @@ html.playing #app {
   font-size: 0.85rem;
 }
 
+/* 判定負けの「次は ◯ 問正解で KO」（情報だけ。煽らない） */
+.ko-next {
+  margin: 8px 0 0;
+  color: var(--text-2);
+}
+
 .actions {
   display: flex;
   flex-direction: column;

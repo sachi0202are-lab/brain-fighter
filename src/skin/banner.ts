@@ -50,6 +50,20 @@ export function outcomeHeadline(outcomes: readonly (RoundOutcome | null)[]): HTM
   return wrap;
 }
 
+/**
+ * 結果画面の「次は ◯ 問正解で KO」（仕様書 9.3: 判定負けは煽らず、情報だけ出す）。◯ = 次の試合の敵 HP の見込み。
+ * 1 ラウンドだけの試合（v1.2 からは 3 ゲームとも）で、そのラウンドが判定負けのときだけ出す。KO / PERFECT、
+ * 見込みが無いとき、ラウンドが複数ある試合（判定負けの見込みはラウンド間の画面に出る）では出さない（null）。
+ */
+export function koNextNote(outcomes: readonly (RoundOutcome | null)[], nextEnemyHp: number | null): HTMLElement | null {
+  if (outcomes.length !== 1 || outcomes[0] !== 'decision' || nextEnemyHp === null) return null;
+  const e = document.createElement('p');
+  e.className = 'ko-next';
+  e.dataset.testid = 'ko-next';
+  e.textContent = ja.outcome.koNext(nextEnemyHp);
+  return e;
+}
+
 /** 技名テロップ（Full のみ・ラウンド間のみ。スライドインするだけで点滅しない） */
 export function specialTelop(seed: number): HTMLElement {
   const e = document.createElement('div');

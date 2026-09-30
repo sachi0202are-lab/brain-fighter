@@ -52,6 +52,11 @@ describe('画面の文言', () => {
     expect(ja.result.singleRoundHeading).toBe('ラウンドの結果');
   });
 
+  it('判定負けは煽らず情報だけ（仕様書 9.3）: 「判定負け」と「次は ◯ 問正解で KO」（ラウンド間の画面と結果画面で共用）', () => {
+    expect(ja.outcome.decision).toBe('判定負け');
+    expect(ja.outcome.koNext(16)).toBe('次は 16 問正解で KO');
+  });
+
   it('所要時間の案内は、3 ゲームとも 1 試合 1 ラウンドの実態（合計 約5分・1 試合 1〜2 分の一本勝負）に合わせる', () => {
     // 案内の前提（ラウンド数を変えたら、この文言と README の所要時間も見直す）
     for (const id of GAME_IDS) {

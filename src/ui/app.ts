@@ -63,6 +63,11 @@ export interface MatchView {
   bestBefore: number;
   level: number;
   tip: string;
+  /**
+   * 次の試合の敵 HP の見込み（この試合の記録まで入れた直近の正答率で計算し直した値）。
+   * 判定負けの「次は ◯ 問正解で KO」に使う。古い版で保存された結果（sessionStorage）には無い
+   */
+  nextEnemyHp?: number | null;
   /** セッションの次のゲーム（無ければ null） */
   nextGame: GameId | null;
   /** 今日のセッションを終えたか */
