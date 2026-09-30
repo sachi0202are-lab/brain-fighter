@@ -115,6 +115,22 @@ describe('戦闘力の集計', () => {
     expect(recentAccuracies(data(all), 'double-hit')).toEqual([0.75, 0.625, 0.875]);
     expect(matchCount(data(all), 'double-hit')).toBe(4);
   });
+
+  it('スタンスチェンジ（1 試合 16 試行。仕様書 v1.3）の敵 HP = ceil(16 × p_cpu)。初回は 12 / 16', () => {
+    const sc = (day: number, correct: number, trials = 16): RoundRecord =>
+      r('stance-change', [9, day, 20, 10], 1, { trials, correct, matchId: `s${day}`, roundNo: 1 });
+    const hpAfter = (rounds: RoundRecord[]): number => enemyHp(16, recentAccuracies(data(rounds), 'stance-change'));
+    // 記録なし: 平均正答率 0.80 と仮定 → p_cpu 0.75 → 12（30 試行のときは 23）
+    expect(hpAfter([])).toBe(12);
+    // 13 / 16（81.25%。既定の疑似プレイヤー）→ p_cpu 0.7625 → ceil(12.2) = 13
+    expect(hpAfter([sc(20, 13)])).toBe(13);
+    // 全問正解 → p_cpu は上限 0.85 → ceil(13.6) = 14。8 / 16 → 下限 0.65 → ceil(10.4) = 11（結果画面の「次は 11 問正解で KO」）
+    expect(hpAfter([sc(20, 16)])).toBe(14);
+    expect(hpAfter([sc(20, 8)])).toBe(11);
+    // v1.2 までの 30 試行の記録が直近に残っていても割合で平均する（0.8・0.8125・0.9375 → 0.85 → p_cpu 0.80 → ceil(12.8) = 13）
+    expect(recentAccuracies(data([sc(19, 24, 30), sc(20, 13), sc(21, 15)]), 'stance-change')).toEqual([0.8, 0.8125, 0.9375]);
+    expect(hpAfter([sc(19, 24, 30), sc(20, 13), sc(21, 15)])).toBe(13);
+  });
 });
 
 describe('ベルト', () => {

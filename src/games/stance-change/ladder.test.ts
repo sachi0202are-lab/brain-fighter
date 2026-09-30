@@ -18,7 +18,8 @@ import {
 const SPEC_D = [2000, 1800, 1620, 1458, 1312, 1181, 1063, 957, 861, 775, 1600, 1440, 1296, 1166, 1050, 945, 850, 765, 700, 700];
 const SPEC_CSI = [1000, 930, 860, 790, 720, 650, 580, 510, 440, 370, 600, 567, 534, 501, 468, 435, 402, 369, 336, 303];
 
-const stats = (correct: number, trials = 30): RoundStats => ({ trials, correct, accuracy: correct / trials, errors: {} });
+/** 1 ラウンドの成績（既定は 1 ラウンドの試行数 16） */
+const stats = (correct: number, trials = 16): RoundStats => ({ trials, correct, accuracy: correct / trials, errors: {} });
 
 describe('難度ラダー（ステップ 1〜20）', () => {
   it('20 ステップの D と CSI が仕様書の表どおり', () => {
@@ -82,14 +83,23 @@ describe('適応（ラウンド単位のしきい値ルール）', () => {
     expect(nextStep(5, 0.7)).toBe(4);
   });
 
-  it('30 試行の境目: 27 正答 +1 / 26・23 正答は維持 / 22 正答 −1', () => {
+  it('16 試行の境目: 15 正答以上 +1 / 12〜14 正答は維持 / 11 正答以下 −1', () => {
+    expect(nextStep(5, 15 / 16)).toBe(6);
+    expect(nextStep(5, 14 / 16)).toBe(5);
+    expect(nextStep(5, 12 / 16)).toBe(5);
+    expect(nextStep(5, 0.75)).toBe(5);
+    expect(nextStep(5, 11 / 16)).toBe(4);
+    expect(nextStep(5, 1)).toBe(6);
+    expect(nextStep(5, 0)).toBe(4);
+    // 0〜16 正答のすべて
+    for (let c = 0; c <= 16; c++) expect(nextStep(5, c / 16), `${c} / 16`).toBe(c >= 15 ? 6 : c >= 12 ? 5 : 4);
+  });
+
+  it('ルールは割合のまま（試行数によらない）: 30 試行なら 27 正答 +1 / 23 正答は維持 / 22 正答 −1', () => {
     expect(nextStep(5, 27 / 30)).toBe(6);
     expect(nextStep(5, 26 / 30)).toBe(5);
     expect(nextStep(5, 23 / 30)).toBe(5);
-    expect(nextStep(5, 0.75)).toBe(5);
     expect(nextStep(5, 22 / 30)).toBe(4);
-    expect(nextStep(5, 1)).toBe(6);
-    expect(nextStep(5, 0)).toBe(4);
   });
 
   it('範囲は 1〜20（上端・下端で止まる）', () => {
@@ -100,7 +110,7 @@ describe('適応（ラウンド単位のしきい値ルール）', () => {
   });
 
   it('adapt は次のステップのラダーの難度を返す（2 → 3 ルールの境目も）', () => {
-    const summary = (acc: number) => ({ ...stats(Math.round(acc * 30)), accuracy: acc }) as never;
+    const summary = (acc: number) => ({ ...stats(Math.round(acc * 16)), accuracy: acc }) as never;
     expect(game.adapt!(ladderParams(10), summary(0.9))).toEqual(ladderParams(11));
     expect(game.adapt!(ladderParams(11), summary(0.7))).toEqual(ladderParams(10));
     expect(game.adapt!(ladderParams(11), summary(0.8))).toEqual(ladderParams(11));
@@ -112,26 +122,31 @@ describe('戦闘力（K=20, L=ステップ, accDown=0.75, accUp=0.90）', () => 
     const f = (L: number, acc: number): number =>
       Math.round((1000 * (L - 1 + Math.min(1, Math.max(0, (acc - 0.75) / (0.9 - 0.75))))) / 20);
     for (const L of [1, 2, 7, 10, 11, 19, 20]) {
-      for (const c of [0, 15, 22, 23, 24, 25, 26, 27, 30]) {
-        expect(stancePower(L, stats(c))).toBe(f(L, c / 30));
-        expect(game.power(ladderParams(L), stats(c))).toBe(f(L, c / 30));
+      for (let c = 0; c <= 16; c++) {
+        expect(stancePower(L, stats(c))).toBe(f(L, c / 16));
+        expect(game.power(ladderParams(L), stats(c))).toBe(f(L, c / 16));
       }
     }
   });
 
-  it('代表値: ステップ1・75% → 0、ステップ1・90% → 50、ステップ20・90% → 1000、ステップ10・82.5% → 475', () => {
-    expect(stancePower(1, stats(0.75 * 40, 40))).toBe(0);
-    expect(stancePower(1, stats(27))).toBe(50);
-    expect(stancePower(20, stats(27))).toBe(1000);
-    expect(stancePower(20, stats(30))).toBe(1000);
+  it('代表値（16 試行）: ステップ1で 12 正答（75%）→ 0、13 → 21、14 → 42、15 以上 → 50。ステップ20・15 正答 → 1000', () => {
+    expect(stancePower(1, stats(12))).toBe(0);
+    expect(stancePower(1, stats(13))).toBe(21);
+    expect(stancePower(1, stats(14))).toBe(42);
+    expect(stancePower(1, stats(15))).toBe(50);
+    expect(stancePower(1, stats(16))).toBe(50);
+    expect(stancePower(20, stats(15))).toBe(1000);
+    expect(stancePower(20, stats(16))).toBe(1000);
+    // 式は試行数によらない（90% ちょうど → 50、ステップ10・82.5% → 475）
+    expect(stancePower(1, stats(27, 30))).toBe(50);
     expect(stancePower(10, stats(33, 40))).toBe(475);
     // 記録が無い（直近ラウンドなし）→ sub = 0
     expect(stancePower(5, null)).toBe(200);
   });
 
   it('速さに依存しない（引数に反応時間が無く、同じ正誤なら同じ値）', () => {
-    const a = { ...stats(25), rtMedianMs: 300 } as RoundStats;
-    const b = { ...stats(25), rtMedianMs: 1500 } as RoundStats;
+    const a = { ...stats(13), rtMedianMs: 300 } as RoundStats;
+    const b = { ...stats(13), rtMedianMs: 1500 } as RoundStats;
     expect(game.power(ladderParams(8), a)).toBe(game.power(ladderParams(8), b));
     expect(game.power.length).toBeLessThanOrEqual(2);
   });
@@ -174,8 +189,10 @@ describe('認定戦の固定ティア（ルール数 / D / CSI）', () => {
     expect(certTierParams(12)).toEqual(certTierParams(9));
   });
 
-  it('合格は 30 試行中 24 正答以上（既定の 79% ルール）', () => {
-    expect(certRoundPassed(game, stats(24), 3)).toBe(true);
-    expect(certRoundPassed(game, stats(23), 3)).toBe(false);
+  it('合格は 16 試行中 13 正答以上（既定の 79% ルール。12 / 16 = 75% は不合格）', () => {
+    expect(certRoundPassed(game, stats(13), 3)).toBe(true);
+    expect(certRoundPassed(game, stats(16), 3)).toBe(true);
+    expect(certRoundPassed(game, stats(12), 3)).toBe(false);
+    for (let c = 0; c <= 16; c++) expect(certRoundPassed(game, stats(c), 7), `${c} / 16`).toBe(c >= 13);
   });
 });

@@ -14,6 +14,8 @@ describe('敵 HP = ceil(N × p_cpu)、p_cpu = clamp(直近3ラウンドの平均
     expect(enemyHp(20, [0.8])).toBe(15);
     expect(enemyHp(24, [0.9, 0.9, 0.9])).toBe(21); // 20.4 → 21
     expect(enemyHp(30, [0.7])).toBe(20); // 19.5 → 20
+    expect(enemyHp(16, [])).toBe(12); // スタンスチェンジの初回: 16 × (0.80 − 0.05) = 12（13 にならない）
+    expect(enemyHp(16, [0.8125])).toBe(13); // 12.2 → 13
   });
 
   it('自分 HP = N − 敵 HP + 1、KO / PERFECT / 判定負け', () => {

@@ -158,15 +158,17 @@ function sampleSave(now = Date.now()) {
         else if (errors > 5) n = Math.max(1, n - 1);
         rec = { trials, correct: trials - errors, paramsStart: { n: start }, paramsEnd: { n }, power, errors: { miss: Math.ceil(errors / 2), fa: Math.floor(errors / 2) } };
       } else {
+        // スタンスチェンジは 1 ラウンド 16 試行（仕様書 v1.3。15 正答以上で +1、11 正答以下で −1）
+        const trials = 16;
         const acc = clamp(0.885 - 0.012 * step + noise(0.06), 0.5, 1);
-        const correct = Math.round(30 * acc);
-        const a = correct / 30;
+        const correct = Math.round(trials * acc);
+        const a = correct / trials;
         const sub = clamp((a - 0.75) / 0.15, 0, 1);
         const power = Math.round((1000 * (step - 1 + sub)) / 20);
         const start = step;
         if (a >= 0.9) step = Math.min(20, step + 1);
         else if (a < 0.75) step = Math.max(1, step - 1);
-        rec = { trials: 30, correct, paramsStart: { step: start }, paramsEnd: { step }, power, errors: { switch: Math.ceil((30 - correct) / 2), repeat: Math.floor((30 - correct) / 2) } };
+        rec = { trials, correct, paramsStart: { step: start }, paramsEnd: { step }, power, errors: { switch: Math.ceil((trials - correct) / 2), repeat: Math.floor((trials - correct) / 2) } };
       }
       rounds.push({
         id: `r-${gameId}-${dayIdx}-${roundNo}`,

@@ -26,11 +26,12 @@ describe('系列の生成', () => {
     }
   });
 
-  it('2値・30 試行・連続 4 回まで（スタンスチェンジの構え）', () => {
+  it('2値・16 試行・連続 4 回まで（スタンスチェンジの 1 ラウンドの長さ）', () => {
     for (let seed = 0; seed < 200; seed++) {
-      const seq = balancedSequence(mulberry32(seed), 30, ['A', 'B'], 4);
+      const seq = balancedSequence(mulberry32(seed), 16, ['A', 'B'], 4);
+      expect(seq).toHaveLength(16);
       expect(maxRunLength(seq)).toBeLessThanOrEqual(4);
-      expect(count(seq, 'A')).toBe(15);
+      expect(count(seq, 'A')).toBe(8);
     }
   });
 

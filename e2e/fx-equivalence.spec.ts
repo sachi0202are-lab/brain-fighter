@@ -8,8 +8,10 @@ import { expect, test } from '@playwright/test';
 import { MATCH_ROUNDS, playMatch, type BfTestLogRound } from './helpers';
 
 const FX = ['off', 'light', 'full'] as const;
-/** 1 ラウンドの試行数（初回なのでコンボ・リコールは n = 1 の 20 + 1） */
-const TRIALS = { 'double-hit': 24, 'combo-recall': 21, 'stance-change': 30 } as const;
+/** 1 ラウンドの試行数（初回なのでコンボ・リコールは n = 1 の 20 + 1。スタンスチェンジは仕様書 v1.3 で 30 → 16） */
+const TRIALS = { 'double-hit': 24, 'combo-recall': 21, 'stance-change': 16 } as const;
+/** 1 試行のフェーズ数（ダブルヒット: 注視・刺激・マスク・応答・フィードバック・試行間隔、コンボ・リコール: 点灯・消灯、スタンスチェンジ: 構え・刺激・フィードバック・試行間隔） */
+const PHASES_PER_TRIAL = { 'double-hit': 6, 'combo-recall': 2, 'stance-change': 4 } as const;
 
 function normalize(logs: BfTestLogRound[]): unknown {
   return logs.map((r) => ({
@@ -56,6 +58,8 @@ for (const gameId of ['double-hit', 'combo-recall', 'stance-change'] as const) {
     // 照合した量（受け入れ基準 1 の根拠として残す）
     const trials = off!.logs.flatMap((r) => r.trials);
     const phases = trials.reduce((a, t) => a + Object.keys(t.plan).length, 0);
+    // 照合したフェーズの数（スタンスチェンジは 16 試行 × 4 = 64）
+    expect(phases).toBe(TRIALS[gameId] * PHASES_PER_TRIAL[gameId]);
     const stimMs = trials.map((t) => t.plan.stimulus ?? 0);
     const description = `${gameId}: off / light / full で ${off!.logs.length} ラウンド・${trials.length} 試行・${phases} フェーズの予定時間（提示時間 ${Math.min(...stimMs).toFixed(1)}〜${Math.max(...stimMs).toFixed(1)} ms を含む）・刺激・正誤・難度・戦闘力が一致（フレーム ${off!.frameMs.toFixed(2)} ms）`;
     testInfo.annotations.push({ type: 'fx-equivalence', description });

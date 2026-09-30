@@ -134,11 +134,18 @@ describe('解放条件（仕様書 第7節「いつ」）', () => {
 
 describe('合否（2 ラウンドとも合格で合格）', () => {
   const dh = fakeGame();
-  it('既定: 1ラウンドの正答率 79% 以上で合格（24 試行中 19、30 試行中 24）', () => {
+  it('既定: 1ラウンドの正答率 79% 以上で合格（24 試行中 19、16 試行中 13）', () => {
     expect(judgeCert(dh, 1, [stats(24, 19), stats(24, 19)]).passed).toBe(true);
     expect(judgeCert(dh, 1, [stats(24, 19), stats(24, 18)])).toEqual({ roundPassed: [true, false], passed: false });
-    expect(judgeCert(dh, 1, [stats(30, 24), stats(30, 24)]).passed).toBe(true);
-    expect(judgeCert(dh, 1, [stats(30, 23), stats(30, 30)]).passed).toBe(false);
+    expect(judgeCert(dh, 1, [stats(16, 13), stats(16, 13)]).passed).toBe(true);
+    expect(judgeCert(dh, 1, [stats(16, 12), stats(16, 16)])).toEqual({ roundPassed: [false, true], passed: false });
+  });
+
+  it('スタンスチェンジ（2 ラウンド × 16 試行）: 13 / 16（81%）以上で合格、12 / 16（75%）は不合格', () => {
+    const sc = GAMES['stance-change'];
+    expect(judgeCert(sc, 1, [stats(16, 13), stats(16, 13)])).toEqual({ roundPassed: [true, true], passed: true });
+    expect(judgeCert(sc, 6, [stats(16, 16), stats(16, 12)])).toEqual({ roundPassed: [true, false], passed: false });
+    for (let c = 0; c <= 16; c++) expect(judgeCert(sc, 9, [stats(16, c), stats(16, c)]).passed, `${c} / 16`).toBe(c >= 13);
   });
 
   it('ラウンドが 2 本そろわなければ不合格', () => {
@@ -254,8 +261,8 @@ describe('実行: 固定難度・未訓練の刺激セット・2 ラウンド（
 });
 
 describe('審査のラウンド数は訓練の試合のラウンド数と別', () => {
-  // ティア 1 の試行数: ダブルヒット 24、コンボ・リコール 20 + n（n = 1）、スタンスチェンジ 30
-  const TIER1_TRIALS: Record<(typeof GAME_IDS)[number], number> = { 'double-hit': 24, 'combo-recall': 21, 'stance-change': 30 };
+  // ティア 1 の試行数: ダブルヒット 24、コンボ・リコール 20 + n（n = 1）、スタンスチェンジ 16（仕様書 v1.3 で 30 から半減）
+  const TIER1_TRIALS: Record<(typeof GAME_IDS)[number], number> = { 'double-hit': 24, 'combo-recall': 21, 'stance-change': 16 };
 
   it.each(GAME_IDS)('%s: 訓練は 1 試合 1 ラウンド（仕様書 v1.2）でも、審査は CERT_ROUNDS = 2 ラウンドでラウンド間が 1 回', async (id) => {
     const base = GAMES[id];

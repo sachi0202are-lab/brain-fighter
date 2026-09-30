@@ -108,6 +108,15 @@ describe('(b) ブロック単位のしきい値ルール（スタンスチェン
     expect(blockDecision(0.7499, SC)).toBe('down');
   });
 
+  it('16 試行（スタンスチェンジの 1 ラウンド）: 15・16 正答 up / 12〜14 正答 stay / 11 正答以下 down', () => {
+    expect(blockDecision(16 / 16, SC)).toBe('up');
+    expect(blockDecision(15 / 16, SC)).toBe('up');
+    expect(blockDecision(14 / 16, SC)).toBe('stay');
+    expect(blockDecision(12 / 16, SC)).toBe('stay');
+    expect(blockDecision(11 / 16, SC)).toBe('down');
+    expect(blockDecision(0, SC)).toBe('down');
+  });
+
   it('ステップの増減と範囲 1〜20', () => {
     expect(blockThresholdStep(5, 1, SC)).toBe(6);
     expect(blockThresholdStep(5, 0.8, SC)).toBe(5);

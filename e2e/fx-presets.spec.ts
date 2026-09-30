@@ -154,7 +154,7 @@ test.describe('演出プリセット', () => {
     await expect(page.locator('.hud-combo')).toBeVisible({ timeout: 60_000 });
     const art = await page.locator('.play.fx-full').evaluate((el) => (el as HTMLElement).style.getPropertyValue('--stage-art'));
     expect(art).toContain('data:image/svg+xml');
-    await expectResultWithoutIntermission(page, 'stance-change', 30);
+    await expectResultWithoutIntermission(page, 'stance-change', 16);
     const result = page.getByTestId('result');
     await expect(page.getByTestId('result-headline')).toHaveText('PERFECT');
     await expect(result.locator('.round-item .round-outcome')).toHaveText('PERFECT');
@@ -162,10 +162,10 @@ test.describe('演出プリセット', () => {
     await expect(result.locator('canvas.fighters')).toHaveCount(1);
     await expect(result.getByTestId('special')).toHaveCount(0);
     await expect(result.locator('.telop')).toHaveCount(0);
-    // 戦闘力: ステップ 1・正答率 100% → round(1000 × ((1 − 1) + 1) / 20) = 50。1 ラウンドでも適応してステップ 2 へ
+    // 戦闘力: ステップ 1・16 試行すべて正解（正答率 100%）→ round(1000 × ((1 − 1) + 1) / 20) = 50。1 ラウンドでも適応してステップ 2 へ
     await expect(powerText(page)).toHaveText('0 → 50（+50）');
     const save = await page.evaluate(() => window.__bfTest.save());
-    expect(save.rounds.map((r) => [r.gameId, r.kind ?? 'round', r.trials, r.correct, r.power])).toEqual([['stance-change', 'round', 30, 30, 50]]);
+    expect(save.rounds.map((r) => [r.gameId, r.kind ?? 'round', r.trials, r.correct, r.power])).toEqual([['stance-change', 'round', 16, 16, 50]]);
     expect(save.games['stance-change']!.state.step).toBe(2);
     await expectSafeAudit(page);
 
