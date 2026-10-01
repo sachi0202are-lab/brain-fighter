@@ -99,7 +99,8 @@ describe.each(GAME_IDS.map((id) => [id, GAMES[id]] as [string, AnyGameModule]))(
 
   it('1試合がヘッドレスで最後まで動き、戦闘力は 0〜1000 の整数', async () => {
     const res = await runMatchHeadless(game, params, { seed: 123 });
-    expect(res.rounds.length).toBe(game.roundsPerMatch ?? 3);
+    expect(res.rounds.length).toBe(game.roundsPerMatch ?? 1);
+    expect(res.warmup).toBeNull();
     for (const r of res.rounds) {
       expect(Number.isInteger(r.power)).toBe(true);
       expect(r.power).toBeGreaterThanOrEqual(0);

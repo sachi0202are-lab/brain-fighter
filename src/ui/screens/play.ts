@@ -3,9 +3,9 @@
  *
  * - 刺激領域・応答ボタン・キー・オーバーレイは共通の舞台（../stage.ts）。
  * - 演出（Hud・ラウンド間表示）はラウンド実行のイベントを購読するだけ。試行の進行には関わらない。
- * - ラウンドは途中で打ち切らない。KO でも最後まで。ラウンド間は 10 秒（スキップ可）。
- *   仕様書 v1.2 からは 3 ゲームとも 1 試合 1 ラウンドなので、日次の試合ではラウンド間の画面も「もう1ラウンド」の確認も
- *   出ない（runMatch が呼ばない）。どちらの画面も、ラウンド数を戻したときのために残してある。
+ * - ラウンドは途中で打ち切らない。KO でも最後まで。
+ * - 訓練は 1 試合 1 ラウンド（仕様書 v1.2）。KO / PERFECT の演出（必殺演出・技名テロップ）は結果画面に出す。
+ *   ラウンド間の画面（10 秒・スキップ可）と「もう1ラウンド」の仕組みは、複数ラウンドのゲームのために残してある。
  * - 試合が終わったら結果画面へ。次の試合へは自動で進まない（ユーザーがボタンで進む）。
  */
 import { localDate } from '../../engine/dates';
@@ -17,6 +17,7 @@ import { RoundAborted } from '../../engine/round';
 import { restoreParams, type AnyGameModule, type Params, type RoundKind } from '../../engine/types';
 import { getGame } from '../../games';
 import { gameText, ja } from '../../i18n/ja';
+import { stageUrl } from '../../skin/art';
 import { backdropUrl } from '../../skin/backdrop';
 import { fightersCanvas, outcomeBanner, specialTelop } from '../../skin/banner';
 import { stageColor } from '../../skin/fighter';
@@ -117,9 +118,16 @@ export function mountPlay(app: App, root: HTMLElement, gameId: string): () => vo
   const intermissionArt = (outcome: ReturnType<typeof roundOutcome> | null): { el: HTMLElement | null; scene: SpecialScene | null } => {
     if (!outcome) return { el: null, scene: null };
     if (features.special && outcome !== 'decision') {
-      const scene = specialScene({ level: currentLevel, reducedMotion: prefersReducedMotion(), onImpact: () => sound?.impact() });
+      // 突きが当たった瞬間に衝撃音、その直後に KO / PERFECT の音
+      const onImpact = (): void => {
+        sound?.impact();
+        setTimeout(() => sound?.sfx(outcome), 180);
+      };
+      const scene = specialScene({ level: currentLevel, reducedMotion: prefersReducedMotion(), onImpact });
       return { el: scene.el, scene };
     }
+    // 静止画のときは KO / PERFECT / 判定の音をすぐに
+    sound?.sfx(outcome);
     return { el: features.fighters ? fightersCanvas({ outcome, level: currentLevel }) : null, scene: null };
   };
 
@@ -154,6 +162,7 @@ export function mountPlay(app: App, root: HTMLElement, gameId: string): () => vo
     const outcome = enemy === null ? null : roundOutcome(s.trials, s.correct, enemy);
     const more = h('button', { type: 'button', class: 'btn block', 'data-testid': 'extra-round' }, ja.play.extraRound);
     const finish = h('button', { type: 'button', class: 'btn primary block', 'data-testid': 'to-result' }, ja.play.toResult);
+    if (features.outcomeLogo && outcome) sound?.sfx(outcome);
     const panel = h(
       'div',
       { class: 'panel intermission', 'data-testid': 'extra-prompt' },
@@ -177,17 +186,21 @@ export function mountPlay(app: App, root: HTMLElement, gameId: string): () => vo
   const surfaceNo = surfaceIndex(matchCount(data, gid), game.surfaceCount ?? 1);
   const powerBefore = latestPower(data, gid);
   const bestBefore = bestPower(data, gid);
-  const totalRounds = game.roundsPerMatch ?? 3;
+  const totalRounds = game.roundsPerMatch ?? 1;
   const roundViews: RoundView[] = [];
   let currentEnemyHp: number | null = null;
   let currentLevel = game.enemyLevel(params0);
   let roundStartedAt = new Date().toISOString();
 
-  /** Full の静的な背景（ラウンドの開始時にだけ決める。ラウンド中は変えない） */
+  /**
+   * Full の静的な背景（ラウンドの開始時にだけ決める。ラウンド中は変えない）:
+   * ステージの画像（--stage-image）を画面全体に、画像が無いときのために遠景のシルエット（--stage-art）と単色（--stage）も入れる。
+   */
   const setBackground = (level: number): void => {
     if (!features.background) return;
     screen.style.setProperty('--stage', stageColor(level));
     screen.style.setProperty('--stage-art', backdropUrl(level));
+    screen.style.setProperty('--stage-image', `url("${stageUrl(level)}")`);
   };
   setBackground(currentLevel);
 
@@ -215,6 +228,7 @@ export function mountPlay(app: App, root: HTMLElement, gameId: string): () => vo
         power: done.power,
         enemyHp: currentEnemyHp,
         outcome: currentEnemyHp === null ? null : roundOutcome(s.trials, s.correct, currentEnemyHp),
+        seed: done.seed,
       });
     }
     if (app.flags.test) {
@@ -252,7 +266,7 @@ export function mountPlay(app: App, root: HTMLElement, gameId: string): () => vo
       level: currentLevel,
       tip: last ? (game.roundTip?.(last.summary) ?? '') : '',
       // 判定負けの「次は ◯ 問正解で KO」用。保存済みのこの試合まで入れた直近の正答率で、次の試合の敵 HP を見込む
-      // （同じ試行数で計算する。コンボ・リコールは次の n で試行数が変わることがあるので概算。ラウンド間の画面と同じ）
+      // （同じ試行数で計算する。コンボ・リコールは次の n で試行数が変わることがあるので概算）
       nextEnemyHp: last ? enemyHp(last.summary.trials, recentAccuracies(app.store.data, gid)) : null,
       nextGame: session ? (session.order.find((g) => !session.done.includes(g)) ?? null) : null,
       sessionDone: session ? session.order.every((g) => session.done.includes(g)) : false,
@@ -266,6 +280,8 @@ export function mountPlay(app: App, root: HTMLElement, gameId: string): () => vo
       await showReady();
       await app.frameReady;
       if (disposed) return;
+      // ラウンド開始の合図（スタート直後。課題の時間には関わらない）
+      sound?.sfx('round-start');
       const result = await runMatch(
         {
           game,
@@ -292,8 +308,15 @@ export function mountPlay(app: App, root: HTMLElement, gameId: string): () => vo
               return [hud.attach(r.events, { trials: n, enemyHp: currentEnemyHp })];
             }),
           onRoundDone: persist,
-          between: (done, next) => showIntermission(done, next.roundNo),
-          askExtra: (done) => showExtraPrompt(done),
+          between: (done, next) =>
+            showIntermission(done, next.roundNo).then(() => {
+              if (!disposed) sound?.sfx('round-start');
+            }),
+          askExtra: (done) =>
+            showExtraPrompt(done).then((more) => {
+              if (more && !disposed) sound?.sfx('round-start');
+              return more;
+            }),
         },
       );
       if (!disposed) finish(result.rounds[result.rounds.length - 1] ?? null);

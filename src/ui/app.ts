@@ -6,7 +6,9 @@ import { measureFrameMs, DEFAULT_FRAME_MS } from '../engine/timing';
 import { parseSeed } from '../engine/rng';
 import type { RoundRunner } from '../engine/round';
 import type { PhaseTiming } from '../engine/types';
-import { SoundPlayer } from '../skin/sound';
+import { preloadArt } from '../skin/art';
+import { SKIN_FEATURES } from '../skin/presets';
+import { SoundPlayer, type BgmTrack } from '../skin/sound';
 import { FX_PRESETS, type FxPreset, type GameId } from '../storage/schema';
 import { browserStorage, type StorageLike } from '../storage/storage';
 import { Store } from '../storage/store';
@@ -50,6 +52,8 @@ export interface RoundView {
   power: number;
   enemyHp: number | null;
   outcome: RoundOutcome | null;
+  /** 試行列の乱数シード（技名テロップの選択に使う） */
+  seed: number;
 }
 
 /** 結果画面に渡す1試合ぶん */
@@ -129,6 +133,9 @@ export class App {
   readonly frameReady: Promise<number>;
   private cleanup: (() => void) | null = null;
   private screens: Record<Route['name'], Mount> | null = null;
+  private route: Route | null = null;
+  /** 新しい版を取り込んだので、試合・審査の画面を離れたら再読み込みする */
+  private pendingReload = false;
 
   constructor(
     readonly root: HTMLElement,
@@ -143,14 +150,31 @@ export class App {
     const unlock = (): void => this.sound.unlock();
     document.addEventListener('pointerdown', unlock, { capture: true, passive: true });
     document.addEventListener('keydown', unlock, { capture: true, passive: true });
+    // BGM はタブが隠れている間は止める
+    document.addEventListener('visibilitychange', () => this.sound.setHidden(document.hidden));
     this.store.subscribe(() => this.applySettings());
     this.applySettings();
+    // 試合で使う画像（ファイター・ステージ）を先に読んでおく（読めなくても図形で描くので待たない）
+    void preloadArt();
   }
 
   start(screens: Record<Route['name'], Mount>): void {
     this.screens = screens;
     window.addEventListener('hashchange', () => this.render());
     this.render();
+  }
+
+  /**
+   * 新しい版（Service Worker）が画面を引き継いだあとの再読み込み（src/main.ts から）。
+   * 試合・審査の画面では待ち、次の画面に移るときに行う（ラウンドの途中で画面が消えないように）。
+   */
+  requestReload(): void {
+    const r = this.route;
+    if (r && (r.name === 'play' || r.name === 'certRun')) {
+      this.pendingReload = true;
+      return;
+    }
+    location.reload();
   }
 
   /** 画面遷移（'/records' など） */
@@ -199,14 +223,40 @@ export class App {
     this.cleanup = null;
     let route = parseRoute(location.hash);
     if (route.name === 'home' && this.needsOnboarding()) route = { name: 'welcome' };
+    if (this.pendingReload && route.name !== 'play' && route.name !== 'certRun') {
+      location.reload();
+      return;
+    }
     this.root.replaceChildren();
     document.body.dataset.route = route.name;
+    this.route = route;
     const mount = this.screens[route.name];
     this.cleanup = mount(this, this.root, route) ?? null;
     if (route.name !== 'play') window.scrollTo(0, 0);
+    this.updateMusic();
   }
 
   private applySettings(): void {
     document.documentElement.classList.toggle('color-safe', this.store.data.settings.colorSafe);
+    this.sound.setMusicEnabled(this.store.data.settings.bgm);
+    this.updateMusic();
+  }
+
+  /**
+   * 画面に応じた BGM（設定でオンのときだけ鳴る。skin/sound.ts）:
+   * 試合中は「試合」の曲を小さめに（演出 Off では鳴らさない）、認定戦では鳴らさない、ほかの画面は「メニュー」の曲。
+   */
+  private updateMusic(): void {
+    const r = this.route;
+    if (!r) return;
+    let track: BgmTrack | null = 'menu';
+    let inRound = false;
+    if (r.name === 'play') {
+      track = SKIN_FEATURES[this.fx()].sound ? 'battle' : null;
+      inRound = true;
+    } else if (r.name === 'certRun') {
+      track = null;
+    }
+    this.sound.setMusic(track, inRound);
   }
 }

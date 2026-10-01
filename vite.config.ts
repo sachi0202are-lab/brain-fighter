@@ -1,9 +1,25 @@
+import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
+
+/** ビルド ID（設定画面に出す。日付＋コミット。どの版が配信されているかを見分けるため） */
+function buildId(): string {
+  const date = new Date().toISOString().slice(0, 10);
+  let sha = process.env.GITHUB_SHA ?? '';
+  if (!sha) {
+    try {
+      sha = execSync('git rev-parse HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    } catch {
+      sha = '';
+    }
+  }
+  return sha ? `${date}-${sha.slice(0, 7)}` : date;
+}
+const BUILD_ID = buildId();
 
 const DESCRIPTION =
   '反応・記憶・切り替えを試す3分ミニゲーム集。格闘ゲーム風の演出で、ゲーム内の成績（戦闘力）と自己ベストを記録できます。';
@@ -35,6 +51,7 @@ export default defineConfig({
   base: '/brain-fighter/',
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
+    __BUILD_ID__: JSON.stringify(BUILD_ID),
   },
   build: {
     target: 'es2022',
@@ -85,7 +102,20 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
+        // 新しい版はすぐに有効にして開いている画面も引き継ぐ（src/main.ts が試合中以外で一度だけ再読み込みする）
+        skipWaiting: true,
+        clientsClaim: true,
+        // 画像素材（public/art/ の JPEG も）と効果音をプリキャッシュして、オフラインでも同じ見た目・音で遊べるようにする。
+        // BGM（1 曲 1MB 前後）はプリキャッシュせず、最初に鳴らしたときにキャッシュする（下の runtimeCaching）
+        globPatterns: ['**/*.{js,css,html,svg,png,jpg,mp3,wav,webmanifest}'],
+        globIgnores: ['**/audio/bgm/**'],
+        runtimeCaching: [
+          {
+            urlPattern: /\/audio\/bgm\/[^/]+\.mp3$/,
+            handler: 'CacheFirst',
+            options: { cacheName: 'brain-fighter-bgm', expiration: { maxEntries: 4 } },
+          },
+        ],
         // ?seed= や ?test= が付いていてもオフラインで開けるように、プリキャッシュの照合ではクエリを無視する
         ignoreURLParametersMatching: [/.*/],
         navigateFallback: 'index.html',

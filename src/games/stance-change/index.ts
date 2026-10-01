@@ -5,12 +5,8 @@
  * アイコンは二価（2 ルール: 高さ・色）または三価（3 ルール: ＋形）の刺激で、応答は左右2ボタン共通
  * （左 = 上段・橙・丸、右 = 下段・青・角）。期限切れは誤答（kind 'timeout'）。
  *
- * 1試合 = 16 試行 × 1 ラウンド（仕様書 v1.1 で「ウォームアップ 12 試行＋3 ラウンド」から 30 試行 × 1 ラウンドに、
- * v1.3 で「1ラウンドがまだ長い。半分ぐらいでいい」というフィードバックにより 16 試行に短縮。試行数は sequence.ts の TRIALS_PER_ROUND）。
- * 毎日の試合ではウォームアップ（単一課題）をしないので createWarmup は定義しない。単一課題の試行列（sequence.ts の
- * makeWarmupTrials）と、ウォームアップを渡されたときの混合コスト（metrics.ts）は、測定用に残してある。
- * 難度はステップ 1〜20 のラダー（ladder.ts）をラウンド単位で上下する（≥ 90% で +1、< 75% で −1。16 試行では 15 正答以上で +1、
- * 11 正答以下で −1）。1試合で最大 1 ステップ動く。
+ * 1試合 = 16 試行 × 1 ラウンド（仕様書 v1.1〜v1.3: ウォームアップ無し、3 ラウンドから 1 ラウンドに、30 試行から 16 試行に）。
+ * 難度はステップ 1〜20 のラダー（ladder.ts）をラウンド単位で上下する（≥ 90% で +1、< 75% で −1。16 試行では 15/16 で +1、11/16 以下で −1）。
  *
  * 部品: model.ts（型）/ ladder.ts（ラダー・適応・認定戦・戦闘力）/ sequence.ts（系列）/ render.ts（描画）/ metrics.ts（記録・一言）
  */
@@ -20,7 +16,7 @@ import { certTierParams, clampStep, ladderParams, nextStep, stancePower } from '
 import { genericTipIndex, stanceMetrics, tipKey } from './metrics';
 import { activeRules, correctSide, RULE_LETTER, type Rule, type ScParams, type ScTrial, type Side, type Transition } from './model';
 import { renderStance, SURFACES } from './render';
-import { makeRoundTrials, WARMUP_RULE } from './sequence';
+import { makeRoundTrials } from './sequence';
 
 export type { Rule, ScParams, ScTrial, Side, Transition } from './model';
 
@@ -56,11 +52,11 @@ const CODES: Readonly<Record<'train' | 'untrained', Readonly<Record<Rule, readon
   train: { height: ['U', 'D'], color: ['o', 'b'], shape: ['r', 'q'] },
   untrained: { height: ['L', 'S'], color: ['y', 'p'], shape: ['t', 'x'] },
 };
-const TRANSITION_CODE: Readonly<Record<Transition, string>> = { first: 'f', repeat: 'r', switch: 's', single: 'w' };
+const TRANSITION_CODE: Readonly<Record<Transition, string>> = { first: 'f', repeat: 'r', switch: 's' };
 
 /**
  * 例 `As:Ub-:i>L` = 構えA・切替 / 上段・青・形なし / 不一致 / 正解は左。
- * 構え A|B|C ＋ 移り変わり f(最初)|r(反復)|s(切替)|w(ウォームアップ) : 高さ U|D（未訓練 L|S）・色 o|b（y|p）・形 r|q（t|x、2 ルールは -）
+ * 構え A|B|C ＋ 移り変わり f(最初)|r(反復)|s(切替) : 高さ U|D（未訓練 L|S）・色 o|b（y|p）・形 r|q（t|x、2 ルールは -）
  * : 一致 c|不一致 i > 正解 L|R
  */
 export function describeStance(t: ScTrial): string {
@@ -70,7 +66,7 @@ export function describeStance(t: ScTrial): string {
   return `${RULE_LETTER[t.rule]}${TRANSITION_CODE[t.transition]}:${attrs}:${t.congruent ? 'c' : 'i'}>${correctSide(t) === 'left' ? 'L' : 'R'}`;
 }
 
-/** 判定。無応答（期限切れ）は timeout、押し間違いはその試行の移り変わり（switch / repeat / first / single） */
+/** 判定。無応答（期限切れ）は timeout、押し間違いはその試行の移り変わり（switch / repeat / first） */
 export function judgeStance(trial: ScTrial, response: Readonly<Record<string, string>> | null): Judgement {
   const got = response?.main;
   if (got === undefined) return { correct: false, kind: 'timeout' };
@@ -78,24 +74,17 @@ export function judgeStance(trial: ScTrial, response: Readonly<Record<string, st
   return { correct: false, kind: trial.transition };
 }
 
-/** ラウンドのルールの一言（構えの意味を出す。kind 'warmup' は単一課題ブロック用で、毎日の試合では使わない） */
-export function introText(rules: number, kind: RoundKind, untrained = false): string {
+/** ラウンドのルールの一言（構えの意味を毎ラウンド出す） */
+export function introText(rules: number, untrained = false): string {
   const names = untrained ? text.stance.namesUntrained : text.stance.names;
   const values = untrained ? text.valuesUntrained : text.values;
   const line = (r: Rule): string => text.intro.rule(RULE_LETTER[r], names[r], values[r][0], values[r][1]);
-  if (kind === 'warmup') {
-    const ignored = activeRules(rules)
-      .filter((r) => r !== WARMUP_RULE)
-      .map((r) => names[r]);
-    return text.intro.warmup(line(WARMUP_RULE), text.intro.and(ignored));
-  }
   return activeRules(rules).map(line).join(text.intro.join);
 }
 
 export const game: GameModule<ScParams, ScTrial> = {
   id: 'stance-change',
   initialParams: ladderParams(1),
-  /** 1試合 = 1 ラウンド（仕様書 v1.1）。認定戦は src/cert/ の CERT_ROUNDS（2）で、この値とは別 */
   roundsPerMatch: 1,
   surfaceCount: SURFACES.length,
 
@@ -103,8 +92,6 @@ export const game: GameModule<ScParams, ScTrial> = {
   restoreParams: (saved) => ladderParams(saved.step ?? 1),
 
   createRound: (params, rng, opts) => makeRoundTrials(rng, params.rules, opts.untrained),
-
-  // createWarmup は定義しない（毎日の試合はウォームアップ無し。仕様書 v1.1）
 
   phases: (_trial, params): PhaseSpec[] => [
     { name: 'cue', ms: params.CSI },
@@ -131,7 +118,7 @@ export const game: GameModule<ScParams, ScTrial> = {
 
   enemyLevel: (params) => clampStep(params.step),
 
-  metrics: (round, ctx) => stanceMetrics(round, ctx.warmup),
+  metrics: (round) => stanceMetrics(round),
 
   roundTip(round) {
     const key = tipKey(round);
@@ -139,7 +126,6 @@ export const game: GameModule<ScParams, ScTrial> = {
     return text.tipFor[key];
   },
 
-  /** info.untrained は今のインターフェースには無い（認定戦の画面が渡せるようになれば未訓練セットの呼び名で出す） */
-  roundIntro: (params, info: { kind: RoundKind; roundNo: number; untrained?: boolean }) =>
-    introText(params.rules, info.kind, info.untrained === true),
+  /** 認定戦（info.untrained）では未訓練セットの呼び名で出す */
+  roundIntro: (params, info: { kind: RoundKind; roundNo: number; untrained?: boolean }) => introText(params.rules, info.untrained === true),
 };

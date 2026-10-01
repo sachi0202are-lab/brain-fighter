@@ -53,7 +53,7 @@ describe('画面の文言', () => {
     expect(ja.result.singleRoundHeading).toBe('ラウンドの結果');
   });
 
-  it('判定負けは煽らず情報だけ（仕様書 9.3）: 「判定負け」と「次は ◯ 問正解で KO」（ラウンド間の画面と結果画面で共用）', () => {
+  it('判定負けは煽らず情報だけ（仕様書 9.3）: 「判定負け」と「次は ◯ 問正解で KO」', () => {
     expect(ja.outcome.decision).toBe('判定負け');
     expect(ja.outcome.koNext(16)).toBe('次は 16 問正解で KO');
   });
@@ -64,13 +64,14 @@ describe('画面の文言', () => {
     for (const id of GAME_IDS) {
       expect(GAMES[id].roundsPerMatch, id).toBe(1);
       expect(GAMES[id].extraRounds ?? 0, id).toBe(0);
+      expect(GAMES[id].createWarmup, id).toBeUndefined();
       const trials = GAMES[id].createRound(GAMES[id].initialParams, mulberry32(1), { untrained: false, surface: 0, roundNo: 1, kind: 'round' });
       expect(trials.length, id).toBe(firstTrials[id]);
     }
     expect(ja.home.sessionNote).toContain('約4分');
     expect(ja.welcome.lead).toBe('毎日 4 分ほど、3 つのミニゲームで戦闘力を上げよう');
     expect(ja.welcome.items2[0]).toContain('1 試合は 1 分前後の一本勝負');
-    // 以前の所要時間・ラウンド数の文言が残っていない（v1.1 の 10 分・v1.2 の 5 分と 1〜2 分）
+    // 以前の所要時間・ラウンド数の文言が残っていない（v1.0 の 12〜15 分・v1.1 の 10 分・v1.2 の 5 分）
     const texts = [ja.home.sessionNote, ja.welcome.lead, ...ja.welcome.items2];
     expect(texts.filter((t) => /10 ?分|12〜15|5 ?分|1〜2 分|1〜3 ラウンド|3 ラウンド/.test(t))).toEqual([]);
   });

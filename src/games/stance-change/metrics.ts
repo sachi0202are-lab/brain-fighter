@@ -2,10 +2,8 @@
  * ラウンド記録に残す固有の指標（仕様書 6.3「記録」）と、ラウンド末の一言の選び方。
  *
  * - 反応時間の中央値は「正答・応答あり」の試行だけで取り、ラウンドの最初の試行（前の構えが無い）は除く。
- * - 切替コスト = 切替試行の RT 中央値 − 反復試行の RT 中央値（毎日の試合の 1 ラウンドから計算する）
- * - 混合コスト = 混合ラウンドの反復試行の RT 中央値 − ウォームアップ（単一課題）の RT 中央値。
- *   ウォームアップが無い（warmup = null）と計算できないので、mixingCost も rtSingle も入れない。
- *   毎日の試合はウォームアップ無し（仕様書 v1.1）なので、日次の記録には混合コストが無い（測定用に計算だけ残す）。
+ * - 切替コスト = 切替試行の RT 中央値 − 反復試行の RT 中央値
+ * - 混合コストは記録しない（v1.1 で日次の試合からウォームアップ＝単一課題ブロックが無くなったため）。
  * - 計算できない値（該当する正答が 0 件など）は入れない（記録は有限の数値だけ）。
  * どの指標も戦闘力・適応には使わない（速さはスコアに影響しない。仕様書 5.1 MUST）。
  */
@@ -39,22 +37,12 @@ export function accuracyOf(results: readonly Result[], pred: (t: ScTrial) => boo
   return xs.length === 0 ? undefined : xs.filter((r) => r.correct).length / xs.length;
 }
 
-/** 単一課題（ウォームアップ）の RT 中央値。ウォームアップが無ければ undefined */
-export function singleTaskRt(warmup: Summary | null): number | undefined {
-  return warmup ? medianRt(warmup.results, () => true) : undefined;
-}
-
-export function stanceMetrics(round: Summary, warmup: Summary | null): Record<string, number> {
+export function stanceMetrics(round: Summary): Record<string, number> {
   const out: Record<string, number> = {
     step: round.paramsPlayed.step,
     rules: round.paramsPlayed.rules,
     accuracy: ratio(round.accuracy),
   };
-  if (round.kind === 'warmup') {
-    const single = singleTaskRt(round);
-    if (single !== undefined) out.rtSingle = ms(single);
-    return out;
-  }
   const isRepeat = isTransition('repeat');
   const isSwitch = isTransition('switch');
   const accRepeat = accuracyOf(round.results, isRepeat);
@@ -66,12 +54,6 @@ export function stanceMetrics(round: Summary, warmup: Summary | null): Record<st
   if (rep !== undefined) out.rtRepeat = ms(rep);
   if (sw !== undefined) out.rtSwitch = ms(sw);
   if (rep !== undefined && sw !== undefined) out.switchCost = ms(sw - rep);
-  // 混合コストと単一課題の RT はウォームアップがあるときだけ（毎日の試合では warmup = null で入らない）
-  const single = singleTaskRt(warmup);
-  if (single !== undefined) {
-    out.rtSingle = ms(single);
-    if (rep !== undefined) out.mixingCost = ms(rep - single);
-  }
   return out;
 }
 

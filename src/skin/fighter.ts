@@ -1,8 +1,25 @@
 /**
- * シルエットのファイター（単純な図形の組合せ。外部画像素材は使わない）。
- * ラウンド間・結果画面だけで描く。刺激領域（ゲーム中の Canvas）には描かない。
+ * ファイター（自キャラ・敵キャラ）の描画。ラウンド間・結果画面だけで描く。刺激領域（ゲーム中の Canvas）には描かない。
+ *
+ * - 画像のシルエット（public/art/fighters/。生成画像から作った黒＋アルファの静止画）が読み込み済みなら、使う場所の色に染めて描く。
+ * - 無ければ単純な図形の組合せ（棒人間）で描く。どちらも影絵風のシルエットで、ポーズの意味は同じ。
+ * - 2 人が向き合う場面（drawScene）は、ステージ背景の画像があればその上に明るいシルエット、無ければ単色の背景に暗いシルエット。
  */
+import { drawSprite, drawStageBackdrop, type SpriteKey } from './art';
+
 export type Pose = 'guard' | 'victory' | 'down' | 'strike';
+export type Who = 'player' | 'enemy';
+
+/** 単色の背景に描くときのシルエットの色 */
+export const INK = '#0b0d17';
+/** ステージ背景の画像の上に描くときのシルエットの色 */
+export const LIGHT_INK = '#eef1ff';
+
+/** 画像のスプライトがあるポーズ */
+const SPRITE_FOR: Readonly<Record<Who, Partial<Record<Pose, SpriteKey>>>> = {
+  player: { guard: 'player-guard', strike: 'player-strike', victory: 'player-victory' },
+  enemy: { guard: 'enemy-guard', down: 'enemy-down' },
+};
 
 interface Pt {
   x: number;
@@ -89,9 +106,15 @@ export interface FighterOptions {
   color: string;
   /** 不透明度（残像用。既定 1） */
   alpha?: number;
+  /** 画像のスプライトを使う側（省略すると図形だけで描く） */
+  who?: Who;
 }
 
 export function drawFighter(ctx: CanvasRenderingContext2D, o: FighterOptions): void {
+  const key = o.who ? SPRITE_FOR[o.who][o.pose] : undefined;
+  if (key !== undefined && drawSprite(ctx, key, { x: o.x, ground: o.ground, height: o.height, facing: o.facing, color: o.color, alpha: o.alpha })) {
+    return;
+  }
   const j = joints(o.pose);
   const h = o.height;
   const P = (p: Pt): [number, number] => [o.x + p.x * h * o.facing, o.ground + p.y * h];
@@ -130,24 +153,41 @@ export function drawFighter(ctx: CanvasRenderingContext2D, o: FighterOptions): v
 export interface SceneOptions {
   width: number;
   height: number;
-  /** ステージの単色背景 */
+  /** ステージの単色背景（画像が無いとき） */
   background: string;
   player: Pose;
   enemy: Pose;
+  /** 敵レベル（ステージ背景の画像を選ぶ）。省略すると単色の背景 */
+  level?: number;
+  /** 画像（スプライト・背景）を使うか。読み込み済みのときだけ true にして、途中で見た目が変わらないようにする。既定 true */
+  art?: boolean;
 }
 
-/** 2人のファイターが向き合う静止画（ラウンド間・結果画面用） */
-export function drawScene(ctx: CanvasRenderingContext2D, o: SceneOptions): void {
-  ctx.save();
+/**
+ * 背景を描き、その上に描くシルエットの色を返す。
+ * ステージ背景の画像があれば明るいシルエット、無ければ単色の背景＋足元の帯に暗いシルエット。
+ */
+export function drawSceneBackground(ctx: CanvasRenderingContext2D, o: SceneOptions): string {
+  const useArt = o.art ?? true;
+  if (useArt && o.level !== undefined && drawStageBackdrop(ctx, { width: o.width, height: o.height, level: o.level })) return LIGHT_INK;
   ctx.fillStyle = o.background;
   ctx.fillRect(0, 0, o.width, o.height);
   const ground = o.height * 0.86;
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.fillRect(0, ground, o.width, o.height - ground);
+  return INK;
+}
+
+/** 2人のファイターが向き合う静止画（ラウンド間・結果画面用） */
+export function drawScene(ctx: CanvasRenderingContext2D, o: SceneOptions): void {
+  ctx.save();
+  const ink = drawSceneBackground(ctx, o);
+  const useArt = o.art ?? true;
+  const ground = o.height * 0.86;
   const fh = o.height * 0.62;
-  const ink = '#0b0d17';
-  drawFighter(ctx, { x: o.width * 0.3, ground, height: fh, facing: 1, pose: o.player, color: ink });
-  drawFighter(ctx, { x: o.width * 0.7, ground, height: fh * 1.05, facing: -1, pose: o.enemy, color: ink });
+  const who = (w: Who): { who?: Who } => (useArt ? { who: w } : {});
+  drawFighter(ctx, { x: o.width * 0.3, ground, height: fh, facing: 1, pose: o.player, color: ink, ...who('player') });
+  drawFighter(ctx, { x: o.width * 0.7, ground, height: fh * 1.05, facing: -1, pose: o.enemy, color: ink, ...who('enemy') });
   ctx.restore();
 }
 

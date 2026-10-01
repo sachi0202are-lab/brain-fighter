@@ -19,7 +19,7 @@ test('初回は 3 画面の案内 → 演出を選んでホームへ。2 回目�
   await expect(w).toContainText(DISCLAIMER);
   await page.getByTestId('welcome-next').click();
   await expect(w).toHaveAttribute('data-step', '2');
-  // 3 ゲームとも 1 試合 1 ラウンド（仕様書 v1.2。上帯の「一本勝負」と同じ言い方）。スタンスチェンジが 16 試行（v1.3）になり 1 試合は 1 分前後
+  // 3 ゲームとも 1 試合 1 ラウンド（仕様書 v1.2。上帯の「一本勝負」と同じ言い方）
   await expect(w).toContainText('1 試合ずつ遊びます（1 試合は 1 分前後の一本勝負）');
   await page.getByTestId('welcome-next').click();
   await expect(w).toHaveAttribute('data-step', '3');
@@ -96,7 +96,7 @@ test('画面から エクスポート → 全消去 → インポート で記�
       sessions: [{ id: 's1', startedAt: at(95), endedAt: at(80), order: ['double-hit', 'combo-recall', 'stance-change'], done: ['double-hit'] }],
     },
   );
-  (data as { settings: object }).settings = { fx: 'off', sound: false, colorSafe: true };
+  (data as { settings: object }).settings = { fx: 'off', sound: false, colorSafe: true, bgm: false };
   await seedSave(page, data, './?test=1#/settings');
   const original = JSON.parse((await page.evaluate(() => localStorage.getItem('brain-fighter.v1'))) as string);
 

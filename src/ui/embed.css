@@ -22,6 +22,16 @@ html.embed .hero-num {
 
 html.embed .game-card {
   padding: 10px 14px;
+  grid-template-columns: 56px minmax(0, 1fr);
+}
+
+html.embed .game-thumb {
+  width: 56px;
+  height: 56px;
+}
+
+html.embed .hero.hero-art {
+  min-height: 160px;
 }
 
 html.embed .game-card .muted.small {

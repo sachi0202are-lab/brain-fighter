@@ -1,5 +1,6 @@
-/** ラウンド末・結果画面の KO / PERFECT / 判定表示と技名テロップ（ラウンド間だけ） */
+/** ラウンド末・結果画面の KO / PERFECT / 判定表示と技名テロップ（ラウンドの外だけ） */
 import { ja } from '../i18n/ja';
+import { ART_SPRITES, ART_STAGES, loadArt, spritesReady, stageKey, stageReady, type SpriteKey } from './art';
 import { drawScene, stageColor, type Pose } from './fighter';
 import type { RoundOutcome } from './hp';
 import { specialMoveName } from './names';
@@ -28,7 +29,7 @@ export function outcomeBanner(o: RoundOutcome, koNext: number | null): HTMLEleme
 /**
  * 結果画面の見出し: KO と PERFECT の数（Light / Full）。どちらも 0 なら出さない
  * （判定負けは各ラウンドの行に情報として出すだけで、見出しにはしない）。
- * 1 ラウンドだけの試合（仕様書 v1.2 からは 3 ゲームとも）は数を付けず「KO」「PERFECT」だけ（「KO × 1」にしない）。
+ * 1 試合 1 ラウンド（訓練の既定）のときは数を付けず「KO」「PERFECT」とだけ出す。
  */
 export function outcomeHeadline(outcomes: readonly (RoundOutcome | null)[]): HTMLElement | null {
   const ko = outcomes.filter((o) => o === 'ko').length;
@@ -64,7 +65,7 @@ export function koNextNote(outcomes: readonly (RoundOutcome | null)[], nextEnemy
   return e;
 }
 
-/** 技名テロップ（Full のみ・ラウンド間のみ。スライドインするだけで点滅しない） */
+/** 技名テロップ（Full のみ・ラウンドの外のみ。スライドインするだけで点滅しない） */
 export function specialTelop(seed: number): HTMLElement {
   const e = document.createElement('div');
   e.className = 'telop';
@@ -72,7 +73,11 @@ export function specialTelop(seed: number): HTMLElement {
   return e;
 }
 
-/** 向き合う2人のシルエット（静止画） */
+/**
+ * 向き合う2人のシルエット（静止画）。
+ * ファイターとステージの画像が読み込み済みならそれで描き、まだなら図形で描いてから、読み終わったときに一度だけ描き直す
+ * （ラウンドの外の絵なので、描き直しても課題には関わらない）。
+ */
 export function fightersCanvas(opts: { outcome: RoundOutcome | null; level: number; width?: number; height?: number }): HTMLCanvasElement {
   const width = opts.width ?? 320;
   const height = opts.height ?? 132;
@@ -85,12 +90,22 @@ export function fightersCanvas(opts: { outcome: RoundOutcome | null; level: numb
   c.style.width = `${width}px`;
   c.style.height = `${height}px`;
   const ctx = c.getContext('2d');
-  if (ctx) {
+  if (!ctx) return c;
+  const win = opts.outcome === 'ko' || opts.outcome === 'perfect';
+  const player: Pose = win ? 'victory' : 'guard';
+  const enemy: Pose = win ? 'down' : 'guard';
+  const sprites: SpriteKey[] = win ? ['player-victory', 'enemy-down'] : ['player-guard', 'enemy-guard'];
+  const draw = (art: boolean): void => {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const win = opts.outcome === 'ko' || opts.outcome === 'perfect';
-    const player: Pose = win ? 'victory' : 'guard';
-    const enemy: Pose = win ? 'down' : 'guard';
-    drawScene(ctx, { width, height, background: stageColor(opts.level), player, enemy });
+    drawScene(ctx, { width, height, background: stageColor(opts.level), player, enemy, level: opts.level, art });
+  };
+  const ready = spritesReady(sprites) && stageReady(opts.level);
+  draw(ready);
+  if (!ready) {
+    const files = [...sprites.map((k) => ART_SPRITES[k].file), ART_STAGES[stageKey(opts.level)].file];
+    void Promise.all(files.map(loadArt)).then((imgs) => {
+      if (c.isConnected && imgs.every((img) => img !== null)) draw(true);
+    });
   }
   return c;
 }

@@ -4,9 +4,8 @@
  * - いつ: そのゲームの訓練日数が 3 日以上、かつ前回の認定戦から 7 日以上（engine/session.ts の certAvailability）。
  *   ベルトが最上位（9 = 黒帯二段）なら、それより上の審査は無い。
  * - 内容: 「現在のベルト + 1」のティアの固定難度（GameModule.certParams）・未訓練の刺激セット（untrained: true）・
- *   2 ラウンド（試行数は訓練と同じ = 同じ createRound。スタンスチェンジは 2 × 16 試行）。適応しない（adapt / adaptTrial を呼ばない。runner.ts）。
- * - 合格: 2 ラウンドとも certRoundPassed（既定: 正答率 79% 以上 = ダブルヒット 24 試行中 19、スタンスチェンジ 16 試行中 13。
- *   コンボ・リコールは誤り 4 以下）。合格でベルト +1。不合格でもベルトは下がらない。
+ *   2 ラウンド（試行数は訓練と同じ = 同じ createRound）。適応しない（adapt / adaptTrial を呼ばない。runner.ts）。
+ * - 合格: 2 ラウンドとも certRoundPassed（既定: 正答率 79% 以上）。合格でベルト +1。不合格でもベルトは下がらない。
  * - 記録: CertRecord（訓練とは別のテーブル）。訓練量（rounds・trainingDays・trials）と戦闘力には数えない。
  *   審査は1ラウンド目を始めた時点で「受けた」と記録する（途中でやめても不合格として残り、次は 7 日後）。
  */

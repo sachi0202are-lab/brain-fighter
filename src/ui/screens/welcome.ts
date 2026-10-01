@@ -5,10 +5,24 @@
  * 初回（記録も案内済みの印も無いとき）にホームの代わりに出る。設定画面から #/welcome でもう一度見られる。
  */
 import { ja } from '../../i18n/ja';
+import { ART_UI, artUrl } from '../../skin/art';
 import { FX_PRESETS, type FxPreset } from '../../storage/schema';
 import type { App } from '../app';
 import { h } from '../dom';
+import { brandLogo } from './home';
 import './welcome.css';
+
+/** キービジュアル（2人のシルエットが向き合う絵）にロゴを重ねる（飾り。alt はロゴだけアプリ名） */
+function keyArt(): HTMLElement {
+  const hero = ART_UI.hero;
+  const logo = ART_UI.logo;
+  return h(
+    'div',
+    { class: 'keyart' },
+    h('img', { class: 'keyart-bg', src: artUrl(hero.file), alt: '', width: hero.w, height: hero.h, decoding: 'async' }),
+    h('img', { class: 'keyart-logo', src: artUrl(logo.file), alt: ja.appName, width: logo.w, height: logo.h, decoding: 'async' }),
+  );
+}
 
 export const WELCOME_STEPS = 3;
 
@@ -27,6 +41,7 @@ export function mountWelcome(app: App, root: HTMLElement): () => void {
   const body = (): HTMLElement[] => {
     if (step === 0) {
       return [
+        keyArt(),
         h('h1', { class: 'welcome-title' }, ja.welcome.title1),
         h('p', { class: 'welcome-lead' }, ja.welcome.lead),
         h('p', null, ja.welcome.body1),
@@ -105,7 +120,7 @@ export function mountWelcome(app: App, root: HTMLElement): () => void {
       h(
         'main',
         { class: 'screen welcome', 'data-testid': 'welcome', 'data-step': String(step + 1) },
-        h('header', { class: 'topbar' }, h('span', { class: 'brand' }, ja.appName), h('span', { class: 'muted small' }, ja.welcome.stepOf(step + 1, WELCOME_STEPS))),
+        h('header', { class: 'topbar' }, brandLogo(), h('span', { class: 'muted small' }, ja.welcome.stepOf(step + 1, WELCOME_STEPS))),
         h('section', { class: 'card welcome-card' }, ...body()),
         h('div', { class: 'actions' }, next, back),
         app.embed ? h('p', { class: 'embed-note' }, ja.embed.note) : null,

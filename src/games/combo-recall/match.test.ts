@@ -1,7 +1,7 @@
 /**
  * コンボ・リコールをエンジン（RoundRunner・runMatch）で動かすテスト（仮想時計・ブラウザ無し）。
  * - 固定タイミング（1 試行 2.5 秒、押しても次の刺激の時刻は同じ）と反応時間の起点
- * - 1 試合 = 1 ラウンド（仕様書 v1.2。「もう1ラウンド」は無い）、速さ非依存、演出プリセット同値性（このゲームだけで、4 試合続けて）
+ * - 1 試合（1 ラウンド。v1.2 で「もう1ラウンド」は廃止）、速さ非依存、演出プリセット同値性（このゲームだけで）
  * - 正答率 80% の疑似プレイヤーで数試合回したときの n と誤りの推移（`--silent=false` で表が出る）
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -89,15 +89,11 @@ describe('固定タイミング（点灯 500 ms → 消灯 2,000 ms、この 2.5
 });
 
 describe('1 試合（エンジンの runMatch）', () => {
-  it('1 試合 = 1 ラウンド（20 + n 試行）。戦闘力は 0〜1000 の整数、記録は有限の数値、n は次の試合に引き継ぐ', async () => {
-    let params: CrParams = { ...game.initialParams };
-    for (let m = 0; m < 3; m++) {
-      const res = await runMatchHeadless(game, params, { seed: 123 + m });
-      expect(res.warmup).toBeNull();
-      expect(res.rounds).toHaveLength(1);
-      const r = res.rounds[0]!;
-      expect(r.summary.roundNo).toBe(1);
-      expect(r.summary.paramsStart).toEqual(params);
+  it('1 ラウンド（仕様書 v1.2）、戦闘力は 0〜1000 の整数、記録は有限の数値', async () => {
+    const res = await runMatchHeadless(game, game.initialParams, { seed: 123 });
+    expect(res.rounds).toHaveLength(1);
+    expect(res.warmup).toBeNull();
+    for (const r of res.rounds) {
       expect(Number.isInteger(r.power)).toBe(true);
       expect(r.power).toBeGreaterThanOrEqual(0);
       expect(r.power).toBeLessThanOrEqual(1000);
@@ -105,30 +101,13 @@ describe('1 試合（エンジンの runMatch）', () => {
       expect(r.metrics.n).toBe(r.summary.paramsPlayed.n);
       expect(r.summary.trials).toBe(20 + r.summary.paramsPlayed.n);
       expect(r.paramsEnd).toEqual({ n: nbackStep(r.summary.paramsPlayed.n, r.summary.trials - r.summary.correct) });
-      expect(res.paramsEnd).toEqual(r.paramsEnd);
-      params = res.paramsEnd;
     }
   });
 
-  it('「もう1ラウンド」は無い: 確認もラウンド間も出さず、1 ラウンドで試合が終わる', async () => {
-    const calls: string[] = [];
-    const res = await runMatch<CrParams, CrTrial>(
-      { game, params: { n: 2 }, surface: 0, previousPower: 0, seedFor: (kind, n) => hashSeed(5, game.id, kind, n) },
-      {
-        runRound: (req) => runRoundHeadless(game, req.trials, req.params, req.options, req.adaptive),
-        onRoundDone: (d) => void calls.push(`done:${d.summary.kind}:${d.summary.roundNo}:${d.summary.trials}`),
-        between: async () => void calls.push('between'),
-        askExtra: async () => {
-          calls.push('askExtra');
-          return true;
-        },
-      },
-    );
-    expect(calls).toEqual(['done:round:1:22']);
+  it('「もう1ラウンド」は無い（extra: true と答えても 1 ラウンドで終わる。仕様書 v1.2）', async () => {
+    const res = await runMatchHeadless(game, game.initialParams, { seed: 5 }, { extra: true });
     expect(res.rounds.map((r) => r.summary.roundNo)).toEqual([1]);
-    // ヘッドレスの「もう1ラウンドを選ぶ」設定でも同じ
-    const yes = await runMatchHeadless(game, game.initialParams, { seed: 5 }, { extra: true });
-    expect(yes.rounds.map((r) => r.summary.roundNo)).toEqual([1]);
+    expect(game.extraRounds).toBeUndefined();
   });
 
   it('速さは戦闘力と次の n に影響しない（同じ正誤で、押す時刻だけ 80 ms と 1,800 ms）', async () => {
@@ -164,7 +143,6 @@ describe('演出プリセット同値性（off / light / full）', () => {
   });
   afterAll(() => restoreDom());
 
-  /** 1 試合 = 1 ラウンドなので 4 試合を続けて遊ぶ（n と敵 HP の直近の正答率は試合をまたいで引き継ぐ。アプリと同じ） */
   async function play(fx: FxPreset): Promise<{ logs: TrialLog[]; ends: unknown[]; sounds: number }> {
     let sounds = 0;
     const sound = { play: () => sounds++, unlock: () => {} } as unknown as SoundPlayer;
@@ -172,32 +150,28 @@ describe('演出プリセット同値性（off / light / full）', () => {
     const logs: TrialLog[] = [];
     const ends: unknown[] = [];
     const recent: number[] = [];
-    let params: CrParams = { n: 3 };
-    for (let m = 1; m <= 4; m++) {
-      const res = await runMatch<CrParams, CrTrial>(
-        { game, params, surface: 1, previousPower: 0, seedFor: (kind, n) => hashSeed(20260929, game.id, m, kind, n) },
-        {
-          runRound: async (req) => {
-            const sched = new VirtualScheduler();
-            const runner = new RoundRunner({ game, trials: req.trials, params: req.params, options: req.options, adaptive: req.adaptive, scheduler: sched });
-            hud.setInfo({ label: `M${m}R${req.roundNo}`, level: game.enemyLevel(req.params), enemyName: 'X', warmup: false });
-            const detach = hud.attach(runner.events, { trials: req.trials.length, enemyHp: enemyHp(req.trials.length, recent) });
-            try {
-              return await driveRunner(runner, sched, { delayMs: (i) => 120 + (i % 3) * 700 });
-            } finally {
-              detach();
-            }
-          },
-          onRoundDone: (d) => {
-            logs.push(...toTrialLogs(`m${m}r${d.summary.roundNo}`, d.summary.results));
-            ends.push({ paramsEnd: d.paramsEnd, power: d.power, metrics: d.metrics });
-            recent.push(d.summary.accuracy);
-          },
-          askExtra: async () => true,
+    await runMatch<CrParams, CrTrial>(
+      { game, params: { n: 3 }, surface: 1, previousPower: 0, seedFor: (kind, n) => hashSeed(20260929, game.id, kind, n) },
+      {
+        runRound: async (req) => {
+          const sched = new VirtualScheduler();
+          const runner = new RoundRunner({ game, trials: req.trials, params: req.params, options: req.options, adaptive: req.adaptive, scheduler: sched });
+          hud.setInfo({ label: `R${req.roundNo}`, level: game.enemyLevel(req.params), enemyName: 'X', warmup: false });
+          const detach = hud.attach(runner.events, { trials: req.trials.length, enemyHp: enemyHp(req.trials.length, recent) });
+          try {
+            return await driveRunner(runner, sched, { delayMs: (i) => 120 + (i % 3) * 700 });
+          } finally {
+            detach();
+          }
         },
-      );
-      params = res.paramsEnd;
-    }
+        onRoundDone: (d) => {
+          logs.push(...toTrialLogs(`r${d.summary.roundNo}`, d.summary.results));
+          ends.push({ paramsEnd: d.paramsEnd, power: d.power, metrics: d.metrics });
+          recent.push(d.summary.accuracy);
+        },
+        askExtra: async () => true,
+      },
+    );
     hud.destroy();
     return { logs, ends, sounds };
   }
@@ -206,9 +180,7 @@ describe('演出プリセット同値性（off / light / full）', () => {
     const played: Awaited<ReturnType<typeof play>>[] = [];
     for (const fx of FX_PRESETS) played.push(await play(fx));
     const [off, light, full] = played;
-    // 4 試合 × (20 + n) 試行（以前の「3 ラウンド＋もう1ラウンド」と同じ量）
-    expect(off!.ends).toHaveLength(4);
-    expect(off!.logs.length).toBeGreaterThan(80);
+    expect(off!.logs.length).toBe(23); // n = 3 の 1 ラウンド
     expect(light!.logs).toEqual(off!.logs);
     expect(full!.logs).toEqual(off!.logs);
     expect(light!.ends).toEqual(off!.ends);
@@ -307,9 +279,7 @@ function checkRules(rows: Row[]): void {
 
 describe('正答率 80% の疑似プレイヤー（ヘッドレス）', () => {
   it('5 試行に 1 回誤る（エンジンの既定の疑似プレイヤー）: 誤り 4 で n = 1 のまま', async () => {
-    // 1 試合 = 1 ラウンドなので、以前（4 試合 × 3 ラウンド）と同じ 12 ラウンドぶん遊ぶ
-    const rows = await simulate(12, 1, ({ i }) => every5thWrong(i));
-    expect(rows).toHaveLength(12);
+    const rows = await simulate(4, 1, ({ i }) => every5thWrong(i));
     report('[5 試行に 1 回誤る]', rows);
     checkRules(rows);
     // 21 試行中 i = 4, 9, 14, 19 の 4 回だけ誤る → 誤り 3〜5 は維持
@@ -317,7 +287,6 @@ describe('正答率 80% の疑似プレイヤー（ヘッドレス）', () => {
   });
 
   it('各試行を確率 80% で正解（5 人 × 24 試合）: n が上下し、誤りと n の変化はルールどおり', async () => {
-    // 1 試合 = 1 ラウンドなので、以前（5 人 × 8 試合 × 3 ラウンド）と同じ 120 ラウンドぶん遊ぶ
     const all: Row[] = [];
     for (let bot = 1; bot <= 5; bot++) {
       const rows = await simulate(24, bot, ({ rng }) => rng.next() < 0.8);
@@ -348,7 +317,6 @@ describe('正答率 80% の疑似プレイヤー（ヘッドレス）', () => {
   });
 
   it('n が上がるほど誤りやすいプレイヤー（正答率 = 1 − 0.03n）: 誤り 3〜5 の帯に n が落ち着く', async () => {
-    // 以前（8 試合 × 3 ラウンド）と同じ 24 ラウンドぶん
     const rows = await simulate(24, 3, ({ n, rng }) => rng.next() < 1 - 0.03 * n);
     report('[正答率 1 − 0.03n]', rows);
     checkRules(rows);

@@ -41,7 +41,7 @@ function trial(roundId: string, i: number): TrialLog {
 /** すべての項目（拡張も含む）が入ったデータ */
 function richData(): SaveData {
   const d = defaultSaveData(new Date('2026-09-01T00:00:00.000Z'));
-  d.settings = { fx: 'full', sound: false, colorSafe: true };
+  d.settings = { fx: 'full', sound: false, colorSafe: true, bgm: true };
   d.games['double-hit'] = { state: { T: 120.5, stage: 1 }, belt: 2, lastCertAt: '2026-09-20T10:00:00.000Z', trainingDays: ['2026-09-27', '2026-09-28'] };
   d.games['combo-recall'].state = { n: 3 };
   d.rounds = [
@@ -60,7 +60,7 @@ describe('読み込み', () => {
     const r = loadSaveData(new MemoryStorage(), NOW);
     expect(r.available).toBe(true);
     expect(r.data.version).toBe(1);
-    expect(r.data.settings).toEqual({ fx: 'light', sound: true, colorSafe: false });
+    expect(r.data.settings).toEqual({ fx: 'light', sound: true, colorSafe: false, bgm: false });
     expect(r.data.rounds).toEqual([]);
     expect(Object.keys(r.data.games).sort()).toEqual(['combo-recall', 'double-hit', 'stance-change']);
   });
@@ -125,7 +125,7 @@ describe('スキーマ移行', () => {
       certs: [{ id: 'c', gameId: 'unknown', at: 'x', tier: 1, passed: true }],
       trials: [trial('ok', 0), { roundId: 'ok' }],
     });
-    expect(d.settings).toEqual({ fx: 'light', sound: true, colorSafe: false });
+    expect(d.settings).toEqual({ fx: 'light', sound: true, colorSafe: false, bgm: false });
     expect(d.games['double-hit']).toEqual({ state: { T: 100 }, belt: 9, trainingDays: ['2026-09-01'] });
     expect(d.games['stance-change']).toEqual({ state: {}, belt: 0, trainingDays: [] });
     expect(d.rounds.map((r) => r.id)).toEqual(['ok']);

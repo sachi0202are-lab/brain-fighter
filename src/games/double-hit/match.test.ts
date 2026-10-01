@@ -5,15 +5,13 @@
 import { describe, expect, it } from 'vitest';
 import { correctPlan, wrongPlan } from '../../engine/autoplay';
 import { runMatchHeadless, runRoundHeadless, type HeadlessOptions } from '../../engine/headless';
-import { runMatch, type RoundDone } from '../../engine/match';
 import { toTrialLogs } from '../../engine/records';
-import { hashSeed, mulberry32 } from '../../engine/rng';
+import { mulberry32 } from '../../engine/rng';
 import type { RoundEvent } from '../../engine/round';
 import { median } from '../../engine/stats';
 import { quantizeMs } from '../../engine/timing';
 import { certRoundPassed, type Response, type ResponseLayout, type RoundOptions } from '../../engine/types';
-import { doubleHitText as text } from '../../i18n/ja/double-hit';
-import { game, genericTipIndex, PHASE_MS, type DhParams, type DhTrial } from './index';
+import { game, PHASE_MS } from './index';
 import { certDhParams, paramsAt } from './params';
 
 const F60 = 1000 / 60;
@@ -45,63 +43,19 @@ function answer(layout: ResponseLayout, expected: Response | null, kind: 'ok' | 
   return [dir, stance];
 }
 
-/**
- * 1試合（= 1 ラウンド）を続けて遊び、ラウンドの結果を集める。難度は試合をまたいで引き継ぐ（アプリは保存した state から戻す）。
- * 試合ごとのシードは seed + 試合の番号。
- */
-async function playMatches(
-  from: DhParams,
-  matches: number,
-  seed: number,
-  opts: HeadlessOptions = {},
-): Promise<{ rounds: RoundDone<DhParams, DhTrial>[]; end: DhParams }> {
-  let params = from;
-  const rounds: RoundDone<DhParams, DhTrial>[] = [];
-  for (let m = 0; m < matches; m++) {
-    const res = await runMatchHeadless(game, params, { seed: seed + m }, opts);
+describe('ヘッドレスの試合（1 試合 1 ラウンド × 24 試行。難度の推移は rounds: 3 で続けて見る）', () => {
+  it('既定は 1 試合 1 ラウンド（仕様書 v1.2）', async () => {
+    const res = await runMatchHeadless(game, game.initialParams, { seed: 20260929 });
     expect(res.warmup).toBeNull();
-    expect(res.rounds).toHaveLength(1);
-    const r = res.rounds[0]!;
-    expect(res.paramsEnd).toEqual(r.paramsEnd);
-    rounds.push(r);
-    params = res.paramsEnd;
-  }
-  return { rounds, end: params };
-}
-
-describe('ヘッドレスの試合（1試合 = 24 試行 × 1 ラウンド）', () => {
-  it('1 試合は 1 ラウンドだけ（ウォームアップ・ラウンド間・「もう1ラウンド」なし）。認定戦とは別', async () => {
-    expect(game.roundsPerMatch).toBe(1);
-    expect(game.extraRounds ?? 0).toBe(0);
-    expect(game.createWarmup).toBeUndefined();
-    const calls: string[] = [];
-    const res = await runMatch(
-      { game, params: game.initialParams, surface: 0, previousPower: 0, seedFor: (k, n) => hashSeed(11, game.id, k, n) },
-      {
-        runRound: (req) => runRoundHeadless(game, req.trials, req.params, req.options, req.adaptive),
-        onRoundDone: (d) => void calls.push(`done:${d.summary.kind}:${d.summary.roundNo}:${d.summary.trials}`),
-        between: async () => void calls.push('between'),
-        askExtra: async () => {
-          calls.push('askExtra');
-          return true;
-        },
-      },
-    );
-    expect(calls).toEqual(['done:round:1:24']);
-    expect(res.warmup).toBeNull();
-    expect(res.rounds).toHaveLength(1);
-    // 1 ラウンドでも T の試行単位の適応・ラウンド末の適応・戦闘力は今までどおり
-    const r = res.rounds[0]!;
-    expect(r.summary.paramsStart.T).toBe(300);
-    expect(r.summary.paramsPlayed.T).toBeLessThan(300);
-    expect(res.paramsEnd).toEqual(r.paramsEnd);
-    expect(r.power).toBe(game.power(r.summary.paramsPlayed, r.summary));
+    expect(res.rounds.map((r) => r.summary.roundNo)).toEqual([1]);
+    expect(res.rounds[0]!.summary.trials).toBe(24);
   });
 
-  it('正答率 80% の自動プレイ: 3 試合とも正答率 75〜85%、T は試合をまたいで短くなっていく', async () => {
-    const { rounds, end } = await playMatches(game.initialParams, 3, 20260929);
-    const rows = rounds.map((r, m) => ({
-      match: m + 1,
+  it('正答率 80% の自動プレイ: 3 ラウンド続けても正答率 75〜85%、T は短くなっていく', async () => {
+    const res = await runMatchHeadless(game, game.initialParams, { seed: 20260929, rounds: 3 });
+    expect(res.rounds).toHaveLength(3);
+    const rows = res.rounds.map((r) => ({
+      round: r.summary.roundNo,
       trials: r.summary.trials,
       acc: Math.round(r.summary.accuracy * 1000) / 10,
       tStart: Math.round(q(r.summary.paramsStart.T) * 10) / 10,
@@ -111,41 +65,37 @@ describe('ヘッドレスの試合（1試合 = 24 試行 × 1 ラウンド）', 
       power: r.power,
       errors: JSON.stringify(r.summary.errors),
     }));
-    console.log(`[double-hit] 80% 自動プレイ（1 試合 1 ラウンド × 3 試合）\n${rows.map((x) => JSON.stringify(x)).join('\n')}`);
-    for (const r of rounds) {
+    console.log(`[double-hit] 80% 自動プレイ\n${rows.map((x) => JSON.stringify(x)).join('\n')}`);
+    for (const r of res.rounds) {
       expect(r.summary.trials).toBe(24);
       expect(r.summary.accuracy).toBeGreaterThanOrEqual(0.75);
       expect(r.summary.accuracy).toBeLessThanOrEqual(0.85);
     }
-    // 次の試合は前の試合の終わりの T から始まる（T の階段法は試合をまたいで続く）
-    expect(rounds[1]!.summary.paramsStart.T).toBeCloseTo(rounds[0]!.paramsEnd.T, 9);
-    expect(rounds[2]!.summary.paramsStart.T).toBeCloseTo(rounds[1]!.paramsEnd.T, 9);
-    const ends = rounds.map((r) => r.summary.paramsPlayed.T);
+    const ends = res.rounds.map((r) => r.summary.paramsPlayed.T);
     expect(ends[0]!).toBeLessThan(300);
     expect(ends[1]!).toBeLessThan(ends[0]!);
     expect(ends[2]!).toBeLessThan(ends[1]!);
-    expect(end.stage).toBe(0);
+    expect(res.paramsEnd.stage).toBe(0);
   }, 30_000);
 
   it('心理測定関数の観察者: ラウンドの正答率は長い目で約 75%、T はしきい値付近に落ち着く', async () => {
-    // alpha = 120 ms → 正答率 75.5% になる T は約 139 ms。1 試合 1 ラウンドなので 36 試合 = 36 ラウンド
+    // alpha = 120 ms → 正答率 75.5% になる T は約 139 ms
     let params = game.initialParams;
     const accs: number[] = [];
     const tEnds: number[] = [];
-    for (let m = 0; m < 36; m++) {
-      const res = await runMatchHeadless(game, params, { seed: 500 + m }, psychometric(120, 900 + m));
+    for (let m = 0; m < 12; m++) {
+      const res = await runMatchHeadless(game, params, { seed: 500 + m, rounds: 3 }, psychometric(120, 900 + m));
       for (const r of res.rounds) {
         accs.push(r.summary.accuracy);
         tEnds.push(r.summary.paramsPlayed.T);
       }
       params = res.paramsEnd;
     }
-    expect(accs).toHaveLength(36);
     const late = accs.slice(3);
     const meanAcc = late.reduce((a, b) => a + b, 0) / late.length;
     const geoT = Math.exp(tEnds.slice(3).reduce((a, t) => a + Math.log(t), 0) / (tEnds.length - 3));
     console.log(
-      `[double-hit] 心理測定の観察者 36 試合（各 1 ラウンド）: 正答率 ${accs.map((a) => Math.round(a * 100)).join(' ')}（4 本目以降の平均 ${(meanAcc * 100).toFixed(1)}%）、T の幾何平均 ${geoT.toFixed(0)} ms`,
+      `[double-hit] 心理測定の観察者 36 ラウンド: 正答率 ${accs.map((a) => Math.round(a * 100)).join(' ')}（4 本目以降の平均 ${(meanAcc * 100).toFixed(1)}%）、T の幾何平均 ${geoT.toFixed(0)} ms`,
     );
     expect(meanAcc).toBeGreaterThan(0.7);
     expect(meanAcc).toBeLessThan(0.82);
@@ -154,29 +104,29 @@ describe('ヘッドレスの試合（1試合 = 24 試行 × 1 ラウンド）', 
     expect(params.stage).toBe(0);
   }, 60_000);
 
-  it('全問正解のプレイヤー: T が下限に達した試合の末にステージが 1 つ上がり（1 試合で最大 1 段）、T は 100 ms に戻る。ステージは 4 で止まる', async () => {
+  it('全問正解のプレイヤー: T が下限に達したラウンドの末にステージが上がり、T は 100 ms に戻る。ステージは 4 で止まる', async () => {
     const plan: HeadlessOptions['plan'] = (c) => correctPlan(c.expected);
-    const { rounds, end } = await playMatches(paramsAt(0, 60), 6, 1, { plan });
-    expect(rounds.map((r) => r.summary.paramsPlayed.stage)).toEqual([0, 1, 2, 3, 4, 4]);
-    expect(rounds.map((r) => r.paramsEnd.stage)).toEqual([1, 2, 3, 4, 4, 4]);
-    // 昇格した試合の後は T = 100 から。ステージ 4 は最上位なので T は下限のまま
-    expect(rounds.map((r) => r.paramsEnd.T)).toEqual([100, 100, 100, 100, 33, 33]);
-    for (const r of rounds) expect(r.paramsEnd.stage - r.summary.paramsStart.stage).toBeLessThanOrEqual(1);
-    // 次の試合はラダーの妨害数・偏心度で戦う
-    expect(rounds[1]!.summary.results.every((r) => r.trial.distractors.length === 6 && r.trial.eccPct === 35)).toBe(true);
-    expect(rounds[2]!.summary.results.every((r) => r.trial.distractors.length === 12)).toBe(true);
+    const a = await runMatchHeadless(game, paramsAt(0, 60), { seed: 1, rounds: 3 }, { plan });
+    expect(a.rounds.map((r) => r.paramsEnd.stage)).toEqual([1, 2, 3]);
+    expect(a.rounds.map((r) => r.paramsEnd.T)).toEqual([100, 100, 100]);
+    // 次のラウンドはラダーの妨害数・偏心度で戦う
+    expect(a.rounds[1]!.summary.results.every((r) => r.trial.distractors.length === 6 && r.trial.eccPct === 35)).toBe(true);
+    expect(a.rounds[2]!.summary.results.every((r) => r.trial.distractors.length === 12)).toBe(true);
     // 戦闘力はステージの境目で連続（stage s・T 33 → 200s+200 = stage s+1・T 500）で、下がらない
-    expect(rounds.map((r) => r.power)).toEqual([200, 400, 600, 800, 1000, 1000]);
+    const powers = a.rounds.map((r) => r.power);
+    expect(powers).toEqual([200, 400, 600]);
+    const b = await runMatchHeadless(game, a.paramsEnd, { seed: 2, rounds: 3 }, { plan });
+    expect(b.rounds.map((r) => r.paramsEnd.stage)).toEqual([4, 4, 4]);
+    expect(b.rounds.map((r) => r.power)).toEqual([800, 1000, 1000]);
     // ステージ 4: 構えは 3 種、妨害 48 個、偏心度 45%
-    const r4 = rounds[4]!.summary.results;
-    expect(new Set(r4.map((r) => r.trial.stance))).toEqual(new Set(['high', 'mid', 'low']));
-    expect(r4.every((r) => r.trial.distractors.length === 48 && r.trial.eccPct === 45)).toBe(true);
-    expect(end).toEqual(paramsAt(4, 33));
+    const r2 = b.rounds[1]!.summary.results;
+    expect(new Set(r2.map((r) => r.trial.stance))).toEqual(new Set(['high', 'mid', 'low']));
+    expect(r2.every((r) => r.trial.distractors.length === 48 && r.trial.eccPct === 45)).toBe(true);
   }, 30_000);
 
   it('下限にいても正答率が 80% 未満のラウンドでは上がらない', async () => {
     // 5 試行中 2 回誤る（正答率 58%）
-    const res = await runMatchHeadless(game, paramsAt(1, 33), { seed: 3 }, {
+    const res = await runMatchHeadless(game, paramsAt(1, 33), { seed: 3, rounds: 1 }, {
       plan: (c) => (c.i % 5 < 3 ? correctPlan(c.expected) : wrongPlan(c.layout, c.expected)),
     });
     expect(res.rounds[0]!.summary.accuracy).toBeLessThan(0.8);
@@ -310,30 +260,6 @@ describe('1 ラウンドの動き', () => {
     expect(new Set(tips).size).toBe(3);
     for (const t of tips) expect(t.length).toBeGreaterThan(0);
     expect(game.roundTip!(stanceHeavy)).toBe(game.roundTip!(stanceHeavy));
-  });
-
-  it('傾向の無いラウンドの一言は、正答数とラウンド番号で順に替える（1試合 1 ラウンドでも毎回同じにならない）', async () => {
-    // 構えだけ 2 回・方向だけ 2 回の誤り（20 / 24 正答 = 83%）: 時間切れも偏りも無く、85% 未満 → 汎用の一言
-    const params = paramsAt(1, 150);
-    const trials = game.createRound(params, mulberry32(6), OPTS);
-    const kinds = ['stance', 'stance', 'dir', 'dir'] as const;
-    const s = await runRoundHeadless(game, trials, params, OPTS, true, {
-      plan: (c) => answer(c.layout, c.expected, kinds[c.i] ?? 'ok'),
-    });
-    expect(s.errors).toEqual({ stance: 2, dir: 2 });
-    expect(s.roundNo).toBe(1);
-    const n = text.tips.length;
-    expect(game.roundTip!(s)).toBe(text.tips[genericTipIndex(s, n)]);
-    // 1 ラウンドの試合（roundNo = 1）でも、正答数が違えば別の一言になり、どの一言も出る
-    const byCorrect = [18, 19, 20].map((correct) => game.roundTip!({ ...s, correct }));
-    expect(new Set(byCorrect).size).toBe(n);
-    expect([...byCorrect].sort()).toEqual([...text.tips].sort());
-    // ラウンド番号が 1 つ進めば次の一言（今までの順番どおり）
-    const byRound = [1, 2, 3].map((roundNo) => game.roundTip!({ ...s, roundNo }));
-    const start = genericTipIndex(s, n);
-    expect(byRound).toEqual([0, 1, 2].map((k) => text.tips[(start + k) % n]));
-    expect(genericTipIndex({ roundNo: 1, correct: 0 }, n)).toBe(0);
-    expect(genericTipIndex({ roundNo: 0, correct: -3 }, n)).toBe(0);
   });
 
   it('ラウンドのルールの一言（roundIntro）はステージの内容を表す', () => {

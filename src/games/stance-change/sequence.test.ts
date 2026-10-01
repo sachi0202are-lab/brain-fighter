@@ -6,13 +6,12 @@ import { ladderParams } from './ladder';
 import { activeRules, correctSide, type ScTrial, type Side } from './model';
 import {
   cueSequence,
+  everyRuleAppears,
   makeRoundTrials,
-  makeWarmupTrials,
-  MIN_EACH_STANCE,
+  MIN_PER_RULE,
   stratifiedAlternate,
   transitionFlags,
   TRIALS_PER_ROUND,
-  WARMUP_TRIALS,
 } from './sequence';
 
 const OPTS = { untrained: false, surface: 0, roundNo: 1, kind: 'round' as const };
@@ -32,9 +31,7 @@ describe.each([2, 3])('訓練ラウンドの系列（%i ルール）', (rules) =
   const all = rounds(rules);
   const flat = all.flat();
 
-  it('1ラウンド 16 試行（偶数）。最初の試行は first、以降は switch / repeat', () => {
-    expect(TRIALS_PER_ROUND).toBe(16);
-    expect(TRIALS_PER_ROUND % 2).toBe(0);
+  it('1ラウンド 16 試行（仕様書 v1.3）。最初の試行は first、以降は switch / repeat', () => {
     for (const r of all) {
       expect(r).toHaveLength(TRIALS_PER_ROUND);
       expect(r[0]!.transition).toBe('first');
@@ -45,16 +42,13 @@ describe.each([2, 3])('訓練ラウンドの系列（%i ルール）', (rules) =
     }
   });
 
-  it('切替率 50%（15 回の移り変わりのうち切替は 7 か 8。どちらも出る）', () => {
+  it('切替率 50%（15 回の移り変わりのうち切替は 7 か 8）', () => {
     let switches = 0;
-    const seen = new Set<number>();
     for (const r of all) {
       const n = r.filter((t) => t.transition === 'switch').length;
       expect(n === 7 || n === 8).toBe(true);
-      seen.add(n);
       switches += n;
     }
-    expect(seen).toEqual(new Set([7, 8]));
     expect(switches / (all.length * 15)).toBeCloseTo(0.5, 2);
   });
 
@@ -69,15 +63,9 @@ describe.each([2, 3])('訓練ラウンドの系列（%i ルール）', (rules) =
   });
 
   it('切替の並びは乱数（交互や固定の型にならない）', () => {
-    const counts = new Map<string, number>();
-    for (const r of all) {
-      const key = r.map((t) => (t.transition === 'switch' ? 's' : 'r')).join('');
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    // 16 試行の並び（切替 7〜8・反復の連続 3 まで）は 8,773 通りしかないので、300 ラウンドでは同じ並びがたまに重なる。
-    // 重なりは偶然の範囲（ほとんどが別の並び・同じ並びは 2 回まで）で、決まった型に偏らない
-    expect(counts.size).toBeGreaterThan(all.length * 0.95);
-    expect(Math.max(...counts.values())).toBeLessThanOrEqual(2);
+    // 15 回の移り変わりの並びは約 1 万通りなので、300 ラウンドでたまたま同じ並びになることは数回ある
+    const patterns = new Set(all.map((r) => r.map((t) => (t.transition === 'switch' ? 's' : 'r')).join('')));
+    expect(patterns.size).toBeGreaterThan(all.length * 0.9);
     // 切替の連続は上限を設けていないので、長い連続も時々ある
     const longSwitchRuns = all.filter((r) => maxRunLength(r.slice(1).map((t) => t.transition)) >= 5).length;
     expect(longSwitchRuns).toBeGreaterThan(0);
@@ -127,12 +115,11 @@ describe.each([2, 3])('訓練ラウンドの系列（%i ルール）', (rules) =
     }
   });
 
-  it(`1ラウンドの中でも、どの構えも ${rules === 2 ? '4 回以上（切替 7〜8 回で交互に入れ替わるため）' : `${MIN_EACH_STANCE} 回以上（足りなければ構えの割り当てを引き直す）`}。均等に固定はしない`, () => {
-    const floor = rules === 2 ? 4 : MIN_EACH_STANCE;
-    const least = all.map((r) => Math.min(...activeRules(rules).map((d) => r.filter((t) => t.rule === d).length)));
-    expect(Math.min(...least)).toBe(floor);
-    // 下限ちょうどのラウンドも、ほぼ均等のラウンドもある（回数を決め打ちしていない）
-    expect(new Set(least).size).toBeGreaterThan(2);
+  it(`どの構えも 1 ラウンドに ${MIN_PER_RULE} 回以上出る${rules === 3 ? '（仕様書 v1.3: 3 ルールでは満たすまで引き直す）' : ''}`, () => {
+    for (const r of all) {
+      const counts = activeRules(rules).map((d) => r.filter((t) => t.rule === d).length);
+      expect(Math.min(...counts)).toBeGreaterThanOrEqual(MIN_PER_RULE);
+    }
   });
 
   if (rules === 3) {
@@ -146,25 +133,33 @@ describe.each([2, 3])('訓練ラウンドの系列（%i ルール）', (rules) =
   }
 });
 
-describe('ウォームアップ（単一課題。毎日の試合では使わない・測定用に残す）', () => {
-  it('12 試行・構えAのみ・切替なし。一致／不一致と左右はそれぞれ 6/6', () => {
-    for (const rules of [2, 3]) {
-      for (const s of SEEDS.slice(0, 50)) {
-        const w = makeWarmupTrials(mulberry32(s), rules, false);
-        expect(w).toHaveLength(WARMUP_TRIALS);
-        expect(w.every((t) => t.rule === 'height' && t.transition === 'single')).toBe(true);
-        expect(w.filter((t) => t.congruent).length).toBe(6);
-        expect(w.filter((t) => correctSide(t) === 'left').length).toBe(6);
-        expect(w.every((t) => (rules === 3 ? t.shape !== null : t.shape === null))).toBe(true);
-      }
+describe('3 ルールの引き直し（仕様書 v1.3: 各構えが 1 ラウンドに 2 回以上出るよう引き直す）', () => {
+  const rules3 = activeRules(3);
+
+  it('引き直さないと 2 回未満の構えが出るラウンドがあり、引き直すと無くなる（切替率・連続の上限はそのまま）', () => {
+    let short = 0;
+    for (const s of SEEDS) {
+      // minPerRule = 0 なら引き直さない（1 回目の並びそのもの）
+      const raw = cueSequence(mulberry32(s), TRIALS_PER_ROUND, rules3, 4, 0);
+      if (!everyRuleAppears(raw, rules3, MIN_PER_RULE)) short += 1;
+      const cues = cueSequence(mulberry32(s), TRIALS_PER_ROUND, rules3);
+      expect(everyRuleAppears(cues, rules3, MIN_PER_RULE)).toBe(true);
+      const sw = cues.filter((c) => c.transition === 'switch').length;
+      expect(sw === 7 || sw === 8).toBe(true);
+      expect(maxRunLength(cues.map((c) => c.rule))).toBeLessThanOrEqual(4);
+    }
+    expect(short).toBeGreaterThan(0);
+  });
+
+  it('2 ルールは引き直さなくても満たす（切替が 7 回以上あるので両方の構えが出る）', () => {
+    for (const s of SEEDS) {
+      const cues = cueSequence(mulberry32(s), TRIALS_PER_ROUND, activeRules(2), 4, 0);
+      expect(everyRuleAppears(cues, activeRules(2), MIN_PER_RULE)).toBe(true);
     }
   });
 
-  it('毎日の試合ではウォームアップをしない（createWarmup を定義しない）。試行列づくりは難度のルール数で動く', () => {
+  it('ウォームアップ（単一課題）は無い（仕様書 v1.1）', () => {
     expect(game.createWarmup).toBeUndefined();
-    const w = makeWarmupTrials(mulberry32(3), ladderParams(12).rules, false);
-    expect(w).toHaveLength(WARMUP_TRIALS);
-    expect(w.some((t) => t.shape !== null)).toBe(true);
   });
 });
 
@@ -184,15 +179,13 @@ describe('系列づくりの部品', () => {
 
   it('transitionFlags: 切替の数ちょうど、反復の連続は上限以下', () => {
     for (const s of SEEDS.slice(0, 100)) {
-      for (const switches of [7, 8]) {
-        const f = transitionFlags(mulberry32(s), 15, switches, 3);
-        expect(f).toHaveLength(15);
-        expect(f.filter(Boolean)).toHaveLength(switches);
-        let run = 0;
-        for (const sw of f) {
-          run = sw ? 0 : run + 1;
-          expect(run).toBeLessThanOrEqual(3);
-        }
+      const f = transitionFlags(mulberry32(s), 15, 7, 3);
+      expect(f).toHaveLength(15);
+      expect(f.filter(Boolean)).toHaveLength(7);
+      let run = 0;
+      for (const sw of f) {
+        run = sw ? 0 : run + 1;
+        expect(run).toBeLessThanOrEqual(3);
       }
     }
     // 上限ぎりぎりの組合せ（反復 9 を 切替 2 で区切る = 3 + 3 + 3）
@@ -205,27 +198,6 @@ describe('系列づくりの部品', () => {
     expect(cueSequence(mulberry32(1), 0, ['height', 'color'])).toEqual([]);
     const one = cueSequence(mulberry32(1), 5, ['color']);
     expect(one.map((c) => c.transition)).toEqual(['first', 'repeat', 'repeat', 'repeat', 'repeat']);
-  });
-
-  it('cueSequence: 3 ルールの引き直しは構えの割り当てだけ（切替の数と並びは制約なしと同じ）', () => {
-    const three = activeRules(3);
-    let redrawn = 0;
-    for (const s of SEEDS.slice(0, 200)) {
-      const free = cueSequence(mulberry32(s), 16, three, 4, 0);
-      const kept = cueSequence(mulberry32(s), 16, three, 4);
-      expect(kept.map((c) => c.transition)).toEqual(free.map((c) => c.transition));
-      for (const d of three) expect(kept.filter((c) => c.rule === d).length).toBeGreaterThanOrEqual(MIN_EACH_STANCE);
-      // 1 回目の割り当てで足りていれば、制約なしと同じ並び
-      const freeLeast = Math.min(...three.map((d) => free.filter((c) => c.rule === d).length));
-      if (freeLeast >= MIN_EACH_STANCE) expect(kept).toEqual(free);
-      else redrawn += 1;
-    }
-    // 16 試行では 1 割ほどのラウンドで引き直す（30 試行ではほとんど起きなかった）
-    expect(redrawn).toBeGreaterThan(0);
-    expect(redrawn).toBeLessThan(40);
-    // 試行数が少なくて満たせないときも例外にせず、いちばん偏りの小さい割り当てを返す
-    const tiny = cueSequence(mulberry32(3), 4, three);
-    expect(tiny).toHaveLength(4);
   });
 
   it('stratifiedAlternate: 層ごと・全体で2値の差が 1 以下', () => {

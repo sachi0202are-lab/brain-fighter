@@ -47,7 +47,7 @@ test('難度・補助・スキップを選ぶ操作が無い（受け入れ基�
     await expectNoDifficultyControls(page, `初回の案内 ${step} / 3`);
     if (step < 3) await page.getByTestId('welcome-next').click();
   }
-  // ゲームの画面（ラウンド中）: 応答ボタンと中断だけ（結果画面はスモークテスト、ラウンド間の画面は認定戦にだけ残るので cert.spec.ts で調べる）
+  // ゲームの画面（ラウンド中）: 応答ボタンと中断だけ（ラウンド間・結果画面はスモークテストで調べる）
   await page.goto('./?test=1#/play/stance-change');
   await page.getByTestId('start').click();
   await expect.poll(() => page.evaluate(() => window.__bfTest.state().running)).toBe(true);
@@ -61,4 +61,31 @@ test('設定の「このアプリについて」に免責文がそのまま出�
   await expect(page.getByTestId('disclaimer')).toHaveText(
     '本アプリは娯楽・自己記録を目的とするゲームです。日常生活の能力向上や疾病の予防・治療を目的・保証するものではありません。医療機器ではありません。',
   );
+});
+
+test('訓練の試合は 1 ラウンドで結果画面へ（ラウンド間の画面も「もう1ラウンド」も出ない。仕様書 v1.2）', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'デスクトップのプロジェクトだけで実行する');
+  test.setTimeout(5 * 60_000);
+  await page.goto('./?test=1&seed=5#/play/combo-recall');
+  // ラウンド間の画面・「もう1ラウンド」の確認が一度でも出たら記録する
+  await page.evaluate(() => {
+    const seen = new Set<string>();
+    (window as unknown as { __bfSeen: Set<string> }).__bfSeen = seen;
+    const ids = ['intermission', 'extra-prompt', 'next-round', 'extra-round'];
+    new MutationObserver(() => {
+      for (const id of ids) if (document.querySelector(`[data-testid="${id}"]`)) seen.add(id);
+    }).observe(document.body, { childList: true, subtree: true });
+    window.__bfTest.autoplay({ delayMs: 60 });
+  });
+  await page.getByTestId('start').click();
+  await expect(page.getByTestId('result')).toBeVisible({ timeout: 180_000 });
+  // 結果画面のラウンドは「一本勝負」の 1 行だけ
+  await expect(page.locator('.round-item')).toHaveCount(1);
+  await expect(page.locator('.round-item .round-no')).toHaveText('一本勝負');
+  const seen = await page.evaluate(() => [...(window as unknown as { __bfSeen: Set<string> }).__bfSeen]);
+  expect(seen).toEqual([]);
+  const logs = await page.evaluate(() => window.__bfTest.logs().map((r) => `${r.kind}:${r.roundNo}`));
+  expect(logs).toEqual(['round:1']);
+  const rounds = await page.evaluate(() => window.__bfTest.save().rounds.filter((r) => r.kind !== 'warmup').length);
+  expect(rounds).toBe(1);
 });

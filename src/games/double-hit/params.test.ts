@@ -100,7 +100,7 @@ describe('試行単位の重み付き階段法（提示時間 T）', () => {
     for (const start of [60, 150, 300, 450]) {
       let p = paramsAt(0, start);
       const seen: number[] = [];
-      // 3 試合分（1 試合 = 1 ラウンド 24 試行）
+      // 3 ラウンド分（24 試行 × 3。1 試合は 1 ラウンドだが、安定を見るために続ける）
       for (let k = 0; k < 72; k++) {
         p = afterTrial(p, k % 4 !== 3);
         seen.push(p.T);

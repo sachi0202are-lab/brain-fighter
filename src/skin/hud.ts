@@ -1,15 +1,18 @@
 /**
- * ゲーム画面の上帯（HP バー・敵レベル・ラウンド数・1 ビットフィードバック・コンボ）。
+ * ゲーム画面の上帯（HP バー・アバター・敵レベル・ラウンド数・1 ビットフィードバック・コンボ）。
  *
  * ラウンド実行のイベントを購読するだけで、進行には関われない（EventSource は購読専用）。
  * - 1 ビットフィードバックは刺激領域の外（上帯）に、最大 250ms、次の刺激の前に必ず消す。
  *   正誤音も、次の刺激までに鳴り終わらない（残り 120 ms 未満の）ときは鳴らさない。
  * - HP バーは静的（アニメーションしない）。低 HP の点滅・警報音は実装しない（MUST NOT）。
+ * - アバター（自キャラ・敵キャラのシルエット画像）は HP バーの外側に置く静止画。ラウンドの開始時に決まり、ラウンド中は変わらない。
  */
 import type { EventSource } from '../engine/events';
 import type { RoundEvent } from '../engine/round';
 import type { FxPreset } from '../storage/schema';
 import { ja } from '../i18n/ja';
+import { enemyFrontSprite, spriteUrl } from './art';
+import { stageColor } from './fighter';
 import { hpState } from './hp';
 import { FEEDBACK_MS, FEEDBACK_SOUND_MIN_MS, SKIN_FEATURES, type SkinFeatures } from './presets';
 import type { SoundPlayer } from './sound';
@@ -44,6 +47,8 @@ export class Hud {
   private readonly sound: SoundPlayer | null;
   private readonly playerSide = el('div', 'hud-side hud-player');
   private readonly enemySide = el('div', 'hud-side hud-enemy');
+  private readonly playerAvatar = el('span', 'hud-avatar hud-avatar-player');
+  private readonly enemyAvatar = el('span', 'hud-avatar hud-avatar-enemy');
   private readonly playerFill = el('div', 'hp-fill');
   private readonly enemyFill = el('div', 'hp-fill');
   private readonly enemyNameEl = el('div', 'hud-name');
@@ -59,12 +64,22 @@ export class Hud {
     this.features = SKIN_FEATURES[opts.preset];
     this.sound = this.features.sound ? opts.sound : null;
     this.el = el('div', 'hud');
+    // 左: アバター → 名前・HP・ダウン
     const playerHp = el('div', 'hp');
     playerHp.append(this.playerFill);
-    this.playerSide.append(el('div', 'hud-name', ja.play.you), playerHp, this.downEl);
+    const playerText = el('div', 'hud-side-text');
+    playerText.append(el('div', 'hud-name', ja.play.you), playerHp, this.downEl);
+    this.playerAvatar.setAttribute('aria-hidden', 'true');
+    this.playerAvatar.style.backgroundImage = `url("${spriteUrl('player-guard')}")`;
+    this.playerSide.append(this.playerAvatar, playerText);
+    // 右: 名前・HP → アバター（敵レベルで決まる正面の敵。setInfo で入れる）
     const enemyHp = el('div', 'hp hp-enemy');
     enemyHp.append(this.enemyFill);
-    this.enemySide.append(this.enemyNameEl, enemyHp);
+    const enemyText = el('div', 'hud-side-text');
+    enemyText.append(this.enemyNameEl, enemyHp);
+    this.enemyAvatar.setAttribute('aria-hidden', 'true');
+    this.enemySide.append(enemyText, this.enemyAvatar);
+    // 中央: ラウンド・敵レベル・1 ビットフィードバック・コンボ
     const meta = el('div', 'hud-meta');
     this.fbEl.setAttribute('aria-hidden', 'true');
     this.fbEl.dataset.testid = 'feedback';
@@ -81,6 +96,8 @@ export class Hud {
     this.roundEl.textContent = info.label;
     this.levelEl.textContent = info.sub ?? (info.warmup ? '' : ja.play.enemyLevel(info.level));
     this.enemyNameEl.textContent = info.enemyName;
+    this.enemyAvatar.style.backgroundImage = `url("${spriteUrl(enemyFrontSprite(info.level))}")`;
+    this.enemyAvatar.style.backgroundColor = stageColor(info.level);
     this.setSidesVisible(this.features.hpBars && !info.warmup);
     this.comboEl.hidden = !(this.features.combo && !info.warmup);
     this.comboEl.textContent = ja.play.combo(0);

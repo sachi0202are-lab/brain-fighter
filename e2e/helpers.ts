@@ -26,20 +26,9 @@ export interface BfSave {
   sessions?: { done: string[]; order: string[] }[];
   games: Record<string, { state: Record<string, number>; belt: number; lastCertAt?: string; trainingDays: string[] }>;
   certs: { id: string; gameId: string; at: string; tier: number; rounds: { trials: number; correct: number }[]; passed: boolean }[];
-  settings: { fx: string; sound: boolean; colorSafe: boolean };
+  settings: { fx: string; sound: boolean; colorSafe: boolean; bgm: boolean };
   onboardedAt?: string;
 }
-
-/**
- * 1 試合のラウンド数。仕様書 v1.2 から 3 ゲームとも 1 ラウンド（ユーザーのフィードバックで短縮。v1.1 まではダブルヒットと
- * コンボ・リコールが 3 ラウンド）。ウォームアップと「もう1ラウンド」はどのゲームにも無いので、日次の試合では
- * ラウンド間の画面が出ない（ラウンド間の画面が残るのは認定戦の 2 ラウンドの間だけ）。
- */
-export const MATCH_ROUNDS: Readonly<Record<'double-hit' | 'combo-recall' | 'stance-change', number>> = {
-  'double-hit': 1,
-  'combo-recall': 1,
-  'stance-change': 1,
-};
 
 /** 端末のローカル日付 'YYYY-MM-DD'（今日から days 日前） */
 export function localDay(daysAgo = 0): string {
@@ -64,7 +53,7 @@ export function saveData(games: Partial<Record<'double-hit' | 'combo-recall' | '
   return {
     version: 1,
     createdAt: new Date(Date.now() - 30 * 86_400_000).toISOString(),
-    settings: { fx: 'light', sound: false, colorSafe: false },
+    settings: { fx: 'light', sound: false, colorSafe: false, bgm: false },
     games: out,
     rounds: [],
     certs: [],
@@ -144,31 +133,26 @@ export async function expectNoDifficultyControls(page: Page, where: string): Pro
 }
 
 /**
- * 開始前の画面で「スタート」を押し、試合が終わって結果画面が出るまで進める。応答は autoplay が入れる。
- * 戻り値は、結果画面までに通ったラウンド間の画面（「もう1ラウンド」の確認を含む）の数。3 ゲームとも 1 試合 1 ラウンド
- * （MATCH_ROUNDS）なので日次の試合では 0 になるはずで、呼び出し側で確かめる。
- * ラウンド間の画面が出たら「次のラウンドへ」で飛ばし、「もう1ラウンド」は選ばない（ラウンド数を戻したときのために残す）。
- * onIntermission はラウンド間の画面が出るたびに、閉じる前に呼ばれる。
+ * 開始前の画面で「スタート」を押し、試合が終わって結果画面が出るまで進める。
+ * ラウンド間は「次のラウンドへ」で飛ばし、「もう1ラウンド」は選ばない。応答は autoplay が入れる。
+ * onIntermission はラウンド間の画面（と「もう1ラウンド」の確認）が出るたびに、閉じる前に呼ばれる。
  */
-export async function playMatch(page: Page, opts: { onIntermission?: () => Promise<void> } = {}): Promise<number> {
+export async function playMatch(page: Page, opts: { onIntermission?: () => Promise<void> } = {}): Promise<void> {
   await page.getByTestId('start').click();
   const next = page.getByTestId('next-round');
   const toResult = page.getByTestId('to-result');
   const result = page.getByTestId('result');
   const any = page.locator('[data-testid="next-round"], [data-testid="to-result"], [data-testid="result"]');
-  let between = 0;
   for (let guard = 0; guard < 50; guard++) {
     await any.first().waitFor({ state: 'visible', timeout: 180_000 });
-    if (await result.isVisible()) return between;
+    if (await result.isVisible()) return;
     if (await toResult.isVisible()) {
-      between += 1;
       await opts.onIntermission?.();
       await toResult.click();
       continue;
     }
     if (await next.isVisible()) {
       // ラウンド間の画面は 10 秒で閉じるが、調べるのは出た直後（閉じたあとでもゲーム画面を調べるだけで結果は同じ）
-      between += 1;
       await opts.onIntermission?.();
       await next.click().catch(() => {
         /* 10 秒で自動的に閉じた直後 */
@@ -176,5 +160,4 @@ export async function playMatch(page: Page, opts: { onIntermission?: () => Promi
     }
   }
   await expect(result).toBeVisible();
-  return between;
 }

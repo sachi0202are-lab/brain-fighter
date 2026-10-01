@@ -7,7 +7,6 @@
  * - 正解: n 個前と同じ位置（標的）なら押す、それ以外は押さない（expectedResponse = null）。
  * - 系列: 20 + n 試行、標的 6、n ≥ 3 でルアー 10〜15%、同じマスの連続は 2 回まで（nback.ts）。
  * - 適応（ラウンド単位）: 誤り = 見逃し + 誤警報。< 3 で n+1、> 5 で n−1（staircase.ts の nbackStep）。
- * - 1試合 = 1 ラウンド（仕様書 v1.2。3 ラウンド＋「もう1ラウンド」から短縮。追加ラウンドは廃止）。n は 1 試合で最大 ±1。
  * - 戦闘力: K = 9、L = n、acc = 1 − 誤り/(20+n)、accDown = 1 − 5/(20+n)、accUp = 1 − 2/(20+n) の一般式。速さは使わない。
  * - 認定戦: n = ティア、円周上の 8 点の未訓練セット（判定は同じ）。n は変えない。
  */
@@ -104,10 +103,8 @@ function isRingRound(round: RoundSummary<CrParams, CrTrial>): boolean {
 export const game: GameModule<CrParams, CrTrial> = {
   id: 'combo-recall',
   initialParams: { n: 1 },
-  /** 1試合 = 1 ラウンド（仕様書 v1.2）。認定戦は src/cert/ の CERT_ROUNDS（2）で、この値とは別 */
+  /** 1 試合 1 ラウンド（仕様書 v1.2。追加ラウンドは廃止） */
   roundsPerMatch: 1,
-  /** 「もう1ラウンド」は廃止（v1.2。1 ラウンドの試合の「一本勝負」表示と矛盾するため）。エンジンの仕組みは残してある */
-  extraRounds: 0,
   surfaceCount: SURFACE_COUNT,
 
   restoreParams(saved) {

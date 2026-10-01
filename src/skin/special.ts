@@ -6,11 +6,13 @@
  *
  * - 課題の外（ラウンド間のオーバーレイ）でだけ動く。ラウンド中・刺激提示中には何も動かさない。
  * - 点滅・フラッシュ・画面揺れ・スローは使わない。明るさが上下に振れる要素は無い
- *   （残像と衝撃の輪の不透明度は、現れたあと単調に下がるだけ。背景は一色で変わらない）。
+ *   （残像と衝撃の輪の不透明度は、現れたあと単調に下がるだけ。背景は一色、または静止画で変わらない）。
  * - 視差を減らす設定（prefers-reduced-motion）では最後の静止画だけを出す。
  * - 動きは specialFrame(t) の純粋関数で決まる（テストで点滅が無いことを確かめる）。
+ * - ファイターとステージの画像（skin/art.ts）は、再生を始める時点で読み込み済みのときだけ使う（途中で絵が変わらない）。
  */
-import { drawFighter, stageColor, type Pose } from './fighter';
+import { spritesReady, stageReady } from './art';
+import { drawFighter, drawSceneBackground, stageColor, type Pose } from './fighter';
 
 /** 動きの長さ（これ以降は最後の形で静止） */
 export const SPECIAL_MS = 1600;
@@ -64,26 +66,34 @@ export function specialFrame(t: number): SpecialFrame {
   };
 }
 
+export interface SpecialDrawOptions {
+  width: number;
+  height: number;
+  /** 単色の背景（画像を使わないとき） */
+  background: string;
+  /** 敵レベル（ステージ背景の画像を選ぶ）。省略すると単色 */
+  level?: number;
+  /** 画像を使うか（再生の開始時に決めて、途中で変えない）。既定 true */
+  art?: boolean;
+}
+
+/** 必殺演出で使う画像（すべて読み込み済みのときだけ使う） */
+export const SPECIAL_SPRITES = ['player-guard', 'player-strike', 'player-victory', 'enemy-guard', 'enemy-down'] as const;
+
 /** 1コマを描く */
-export function drawSpecialFrame(
-  ctx: CanvasRenderingContext2D,
-  f: SpecialFrame,
-  o: { width: number; height: number; background: string },
-): void {
+export function drawSpecialFrame(ctx: CanvasRenderingContext2D, f: SpecialFrame, o: SpecialDrawOptions): void {
   const { width: W, height: H } = o;
   ctx.save();
-  ctx.fillStyle = o.background;
-  ctx.fillRect(0, 0, W, H);
+  const ink = drawSceneBackground(ctx, { width: W, height: H, background: o.background, player: f.playerPose, enemy: f.enemyPose, level: o.level, art: o.art });
+  const useArt = o.art ?? true;
+  const who = (w: 'player' | 'enemy'): { who?: 'player' | 'enemy' } => (useArt ? { who: w } : {});
   const ground = H * 0.86;
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.fillRect(0, ground, W, H - ground);
   const fh = H * 0.62;
-  const ink = '#0b0d17';
   for (const t of f.trail) {
-    drawFighter(ctx, { x: W * t.x, ground, height: fh, facing: 1, pose: 'guard', color: ink, alpha: t.alpha });
+    drawFighter(ctx, { x: W * t.x, ground, height: fh, facing: 1, pose: 'guard', color: ink, alpha: t.alpha, ...who('player') });
   }
-  drawFighter(ctx, { x: W * f.enemyX, ground, height: fh * 1.05, facing: -1, pose: f.enemyPose, color: ink });
-  drawFighter(ctx, { x: W * f.playerX, ground, height: fh, facing: 1, pose: f.playerPose, color: ink });
+  drawFighter(ctx, { x: W * f.enemyX, ground, height: fh * 1.05, facing: -1, pose: f.enemyPose, color: ink, ...who('enemy') });
+  drawFighter(ctx, { x: W * f.playerX, ground, height: fh, facing: 1, pose: f.playerPose, color: ink, ...who('player') });
   if (f.ring) {
     ctx.globalAlpha = f.ring.alpha;
     ctx.strokeStyle = '#fff7e0';
@@ -125,10 +135,12 @@ export function specialScene(opts: {
   c.style.height = `${height}px`;
   const ctx = c.getContext('2d');
   const background = stageColor(opts.level);
+  // 画像は再生を始める時点でそろっているときだけ使う（途中で絵が変わらないように）
+  const art = spritesReady(SPECIAL_SPRITES) && stageReady(opts.level);
   const draw = (t: number): void => {
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawSpecialFrame(ctx, specialFrame(t), { width, height, background });
+    drawSpecialFrame(ctx, specialFrame(t), { width, height, background, level: opts.level, art });
   };
   let handle: number | null = null;
   let impacted = false;

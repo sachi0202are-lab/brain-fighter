@@ -54,9 +54,5 @@ export const stanceChangeText = {
       `構え${letter}「${name}」${left} = 左／${right} = 右`,
     /** 構えと構えの区切り */
     join: '　',
-    /** ウォームアップ（単一課題）の説明（毎日の試合はウォームアップ無しなので、今は出ない） */
-    warmup: (rule: string, ignored: string): string => `ウォームアップは構えが変わりません。${rule}（${ignored}は気にせず答えます）`,
-    /** 「色」「色と形」 */
-    and: (names: readonly string[]): string => names.join('と'),
   },
 } satisfies GameText & Record<string, unknown>;

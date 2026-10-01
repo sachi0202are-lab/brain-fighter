@@ -16,6 +16,8 @@ export interface Settings {
   fx: FxPreset;
   sound: boolean;
   colorSafe: boolean;
+  /** BGM（既定オフ。仕様書 9.4）。古い保存データに無ければ false として読む */
+  bgm: boolean;
 }
 
 export interface GameSave {

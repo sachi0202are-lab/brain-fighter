@@ -13,6 +13,7 @@
  */
 import type { PhaseName, RenderView } from '../../engine/types';
 import { stanceChangeText as text } from '../../i18n/ja/stance-change';
+import { artInRound, drawSprite, type SpriteKey } from '../../skin/art';
 import { RULE_LETTER, type Rule, type ScTrial, type Side } from './model';
 
 const FONT = "system-ui, -apple-system, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Yu Gothic UI', Meiryo, sans-serif";
@@ -236,7 +237,18 @@ function disc(ctx: CanvasRenderingContext2D, s: number, [x, y]: P, r: number): v
   ctx.fill();
 }
 
+/** 体格ごとの画像のシルエット（正面の敵 3 体。ラウンドの開始時に読み込み済みのときだけ使う） */
+const SPRITE_FOR_FIGURE: Readonly<Record<Figure, SpriteKey>> = { orthodox: 'enemy-front-a', heavy: 'enemy-front-b', slim: 'enemy-front-c' };
+/** 画像のシルエットの足元と立ち姿の高さ（図形の敵と同じ位置・大きさ。アイコンの高さ 0.47 / 0.83 が胸と膝に当たる） */
+const SPRITE_GROUND = 0.965;
+const SPRITE_HEIGHT = 0.675;
+
+/**
+ * 敵のシルエット（薄い色の静止画）。画像のシルエット（skin/art.ts）がラウンドの開始時に読み込み済みなら表層の色に染めて描き、
+ * 無ければ単純な図形で描く。どちらも背景の一部で、アイコンの位置・色・形・時間には関わらない。
+ */
 function drawEnemy(ctx: CanvasRenderingContext2D, s: number, figure: Figure, color: string): void {
+  if (drawSprite(ctx, SPRITE_FOR_FIGURE[figure], { x: 0.5 * s, ground: SPRITE_GROUND * s, height: SPRITE_HEIGHT * s, facing: 1, color }, artInRound)) return;
   const f = FIGURES[figure];
   ctx.save();
   ctx.strokeStyle = color;

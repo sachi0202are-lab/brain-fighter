@@ -1,9 +1,8 @@
 /**
  * 1試合（= 1ゲームの1セッション分）の進行。
- * ウォームアップ（任意）→ ラウンド × roundsPerMatch（→ 任意の追加ラウンド）。
+ * ウォームアップ（任意）→ ラウンド × roundsPerMatch（既定 1。仕様書 v1.2）（→ 任意の追加ラウンド）。
+ * 複数ラウンド・ウォームアップ・追加ラウンドの仕組みはエンジンに残してある（認定戦は 2 ラウンド）。
  * 画面（ラウンド間の演出、保存）は hooks で差し込む。ヘッドレスのテストでも同じ関数を使う。
- * 仕様書 v1.2 からは登録ゲームはどれも 1 ラウンドで、ウォームアップ・ラウンド間・追加ラウンドを使わない
- * （仕組みは残す。認定戦の 2 ラウンドは src/cert/runner.ts が別に回す）。
  */
 import { normalizePower } from './power';
 import { mulberry32 } from './rng';
@@ -81,7 +80,7 @@ export interface MatchConfig<P extends Params, T> {
   adaptive?: boolean;
   /** ウォームアップをするか（既定 true。ゲームが createWarmup を持つときだけ） */
   warmup?: boolean;
-  /** ラウンド数（既定 game.roundsPerMatch ?? 3） */
+  /** ラウンド数（既定 game.roundsPerMatch ?? 1。認定戦は 2） */
   rounds?: number;
   /** 「もう1ラウンド」を出すか（既定 true） */
   allowExtra?: boolean;
@@ -117,7 +116,7 @@ export async function runMatch<P extends Params, T>(
   const { game } = cfg;
   const adaptive = cfg.adaptive ?? true;
   const untrained = cfg.untrained ?? false;
-  let planned = cfg.rounds ?? game.roundsPerMatch ?? 3;
+  let planned = cfg.rounds ?? game.roundsPerMatch ?? 1;
   let extraLeft = (cfg.allowExtra ?? true) ? (game.extraRounds ?? 0) : 0;
   let params: P = { ...cfg.params };
   let previousPower = cfg.previousPower;

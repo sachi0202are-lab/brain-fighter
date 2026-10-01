@@ -4,11 +4,35 @@
  * ラウンド中（刺激の提示中）に動く要素は置かない。
  */
 
-/* Full: 静的なカスタム背景。画面の下端（応答ボタンの後ろ）だけに置き、刺激領域には重ならない */
+/*
+ * Full: 静的なカスタム背景。ステージの画像（public/art/stages/。敵レベルから決まる静止画）を画面全体に敷き、
+ * 上に暗い膜をかけて上帯の文字を読みやすくする。画像が無いときは遠景のシルエット（SVG）と単色のグラデーション。
+ * どの層も動かない。刺激領域（.stim）は不透明なので背景は重ならない。
+ */
 .play.fx-full {
   background:
+    linear-gradient(to bottom, rgba(14, 17, 32, 0.78) 0%, rgba(14, 17, 32, 0.5) 32%, rgba(14, 17, 32, 0.38) 100%),
+    var(--stage-image, none) center / cover no-repeat,
     var(--stage-art, none) center bottom / 100% 20% no-repeat,
     radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--stage, #5a6aa8) 32%, var(--bg)) 0%, var(--bg) 72%);
+}
+
+/* 上帯のアバター（静止画）: 自キャラは橙の丸、敵はステージ色の丸（setInfo で入る）に黒いシルエットの上半身 */
+.hud-avatar {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: var(--accent);
+  background-repeat: no-repeat;
+  background-size: auto 250%;
+  background-position: 56% 6%;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+}
+
+.hud-avatar-enemy {
+  background-color: #5a6aa8;
+  background-position: 50% 4%;
 }
 
 /* Light / Full: ラウンド間の KO / PERFECT / 判定は一度だけ静かに出る */

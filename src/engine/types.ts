@@ -189,10 +189,10 @@ export interface GameModule<P extends Params = Params, T = unknown> {
   /** 初期難度（初回のみ。2試合目以降は保存された state から restoreParams で復元） */
   readonly initialParams: P;
 
-  /** 1試合のラウンド数（既定 3。仕様書 v1.2 からは登録ゲーム 3 本とも 1） */
+  /** 1試合のラウンド数（既定 1。仕様書 v1.2 で 3 ゲームとも 1 ラウンド） */
   readonly roundsPerMatch?: number;
 
-  /** 試合の最後に「もう1ラウンド」で追加できるラウンド数（既定 0。v1.2 で廃止し、いまはどのゲームも使わない） */
+  /** 試合の最後に「もう1ラウンド」で追加できるラウンド数（既定 0。v1.2 でどのゲームも使わなくなった） */
   readonly extraRounds?: number;
 
   /** 表層（刺激の見た目）のバリエーション数（既定 1。仕様書 4.4） */

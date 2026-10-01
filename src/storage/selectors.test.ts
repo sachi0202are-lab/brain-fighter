@@ -84,7 +84,9 @@ describe('戦闘力の集計', () => {
     expect(matchCount(d, 'double-hit')).toBe(2);
     expect(roundAccuracySeries(d)).toHaveLength(5);
   });
+});
 
+describe('敵 HP の元になる直近の正答率（1 試合 1 ラウンド）', () => {
   it('1 試合 1 ラウンド（仕様書 v1.2）では、敵 HP の「直近 3 ラウンド」= そのゲームの直近 3 試合（日をまたぐ）', () => {
     // ダブルヒット（24 試行）を 1 日 1 試合。間にほかのゲームと v1.0 のウォームアップの記録が混ざる
     const dh = (day: number, correct: number): RoundRecord =>

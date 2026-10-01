@@ -12,11 +12,11 @@ export interface SkinFeatures {
   sound: boolean;
   /** ラウンド末の KO / PERFECT / 判定表示 */
   outcomeLogo: boolean;
-  /** ラウンド間のシルエットのファイター */
+  /** ラウンドの外（結果画面・ラウンド間）のシルエットのファイター */
   fighters: boolean;
   /** 上帯のコンボ表示 */
   combo: boolean;
-  /** ラウンド間の技名テロップ（必殺演出） */
+  /** ラウンドの外（結果画面・ラウンド間）の必殺演出と技名テロップ */
   special: boolean;
   /** 静的なカスタム背景（刺激領域の外） */
   background: boolean;

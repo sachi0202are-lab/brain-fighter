@@ -1,7 +1,7 @@
 {
   "name": "brain-fighter",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "格闘ゲーム風の見た目をした脳トレミニゲーム集（PWA）",
   "scripts": {
@@ -13,7 +13,9 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "lint:words": "node scripts/lint-words.mjs",
-    "icons": "node scripts/gen-icons.mjs",
+    "art": "node scripts/art/process.mjs",
+    "audio": "node scripts/audio/process.mjs",
+    "icons": "node scripts/art/process.mjs icons",
     "screenshots": "node scripts/screenshots.mjs"
   },
   "engines": {

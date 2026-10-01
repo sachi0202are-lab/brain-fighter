@@ -1,15 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { fakeGame } from '../test/fake-game';
-import { runMatchHeadless, runRoundHeadless } from './headless';
-import { concludeRound, runMatch, surfaceIndex } from './match';
-import { hashSeed } from './rng';
+import { runMatchHeadless } from './headless';
+import { concludeRound, surfaceIndex } from './match';
 import type { RoundSummary } from './types';
 import type { FakeParams, FakeTrial } from '../test/fake-game';
 
 describe('試合の進行', () => {
-  it('3ラウンド。ラウンド単位の適応が次のラウンドに引き継がれる', async () => {
+  it('既定は 1 試合 1 ラウンド（game.roundsPerMatch が無ければ 1。仕様書 v1.2）', async () => {
     const game = fakeGame({ trials: 5 });
-    const res = await runMatchHeadless(game, { level: 3, stimMs: 100 }, { seed: 1 }, { plan: ({ expected }) => [expected!.side as string] });
+    const plan = ({ expected }: { expected: Record<string, string> | null }) => [expected!.side as string];
+    const res = await runMatchHeadless(game, { level: 3, stimMs: 100 }, { seed: 1 }, { plan });
+    expect(res.warmup).toBeNull();
+    expect(res.rounds.map((r) => r.summary.roundNo)).toEqual([1]);
+    expect(res.paramsEnd.level).toBe(4);
+    const three = await runMatchHeadless({ ...game, roundsPerMatch: 3 }, { level: 3, stimMs: 100 }, { seed: 1 }, { plan });
+    expect(three.rounds).toHaveLength(3);
+  });
+
+  it('3ラウンド（rounds: 3）。ラウンド単位の適応が次のラウンドに引き継がれる', async () => {
+    const game = fakeGame({ trials: 5 });
+    const res = await runMatchHeadless(game, { level: 3, stimMs: 100 }, { seed: 1, rounds: 3 }, { plan: ({ expected }) => [expected!.side as string] });
     expect(res.warmup).toBeNull();
     expect(res.rounds).toHaveLength(3);
     // 全問正解 → 毎ラウンド level +1
@@ -23,7 +33,7 @@ describe('試合の進行', () => {
     const base = fakeGame({ trials: 4 });
     const game = { ...base, createWarmup: base.createRound };
     const seen: string[] = [];
-    const res = await runMatchHeadless(game, { level: 2, stimMs: 100 }, { seed: 2, previousPower: 123 }, {
+    const res = await runMatchHeadless(game, { level: 2, stimMs: 100 }, { seed: 2, previousPower: 123, rounds: 3 }, {
       onRoundDone: (d) => seen.push(`${d.summary.kind}:${d.summary.roundNo}`),
     });
     expect(seen).toEqual(['warmup:0', 'round:1', 'round:2', 'round:3']);
@@ -32,37 +42,14 @@ describe('試合の進行', () => {
     expect(res.warmup!.summary.paramsPlayed.stimMs).toBe(100);
   });
 
-  it('roundsPerMatch = 1 なら 1 ラウンドで終わり、ラウンド間（between）も「もう1ラウンド」の確認も呼ばない', async () => {
-    const game = { ...fakeGame({ trials: 4 }), roundsPerMatch: 1 };
-    const calls: string[] = [];
-    const res = await runMatch(
-      { game, params: { level: 3, stimMs: 100 }, surface: 0, previousPower: 0, seedFor: (k, n) => hashSeed(5, game.id, k, n) },
-      {
-        runRound: (req) =>
-          runRoundHeadless(game, req.trials, req.params, req.options, req.adaptive, { plan: ({ expected }) => [expected!.side as string] }),
-        onRoundDone: (d) => void calls.push(`done:${d.summary.kind}:${d.summary.roundNo}`),
-        between: async () => void calls.push('between'),
-        askExtra: async () => {
-          calls.push('askExtra');
-          return true;
-        },
-      },
-    );
-    expect(res.warmup).toBeNull();
-    expect(res.rounds).toHaveLength(1);
-    expect(calls).toEqual(['done:round:1']);
-    // ラウンド単位の適応と戦闘力は 1 ラウンドでも行う（全問正解 → level +1、次の試合はその難度から）
-    expect(res.rounds[0]!.summary.paramsPlayed.level).toBe(3);
-    expect(res.paramsEnd.level).toBe(4);
-    expect(res.rounds[0]!.power).toBe(350);
-  });
-
-  it('extraRounds があれば「もう1ラウンド」で1本増える', async () => {
+  it('extraRounds があれば「もう1ラウンド」で1本増える（どのゲームも使っていないが仕組みは残す）', async () => {
     const game = { ...fakeGame({ trials: 3 }), extraRounds: 1 };
     const yes = await runMatchHeadless(game, game.initialParams, { seed: 3 }, { extra: true });
-    expect(yes.rounds).toHaveLength(4);
+    expect(yes.rounds).toHaveLength(2);
     const no = await runMatchHeadless(game, game.initialParams, { seed: 3 }, { extra: false });
-    expect(no.rounds).toHaveLength(3);
+    expect(no.rounds).toHaveLength(1);
+    const none = await runMatchHeadless(fakeGame({ trials: 3 }), game.initialParams, { seed: 3 }, { extra: true });
+    expect(none.rounds).toHaveLength(1);
   });
 
   it('認定戦のように adaptive=false なら難度は動かない', async () => {

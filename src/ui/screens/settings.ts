@@ -84,6 +84,7 @@ export function mountSettings(app: App, root: HTMLElement): () => void {
       { class: 'card fieldset' },
       h('legend', null, ja.settings.displayHeading),
       toggle(ja.settings.sound, s.sound, (v) => app.store.update((d) => void (d.settings.sound = v)), 'sound'),
+      toggle(ja.settings.bgm, s.bgm, (v) => app.store.update((d) => void (d.settings.bgm = v)), 'bgm'),
       toggle(ja.settings.colorSafe, s.colorSafe, (v) => app.store.update((d) => void (d.settings.colorSafe = v)), 'color-safe'),
     );
 
@@ -207,7 +208,7 @@ export function mountSettings(app: App, root: HTMLElement): () => void {
       h('p', { class: 'disclaimer', 'data-testid': 'disclaimer' }, ja.settings.disclaimer),
       h('p', { class: 'muted small' }, ja.settings.privacy),
       h('a', { class: 'btn ghost small', href: '#/welcome', 'data-testid': 'welcome-again' }, ja.settings.welcomeAgain),
-      h('p', { class: 'muted small' }, ja.settings.version(__APP_VERSION__)),
+      h('p', { class: 'muted small', 'data-testid': 'version' }, `${ja.settings.version(__APP_VERSION__)}（${ja.settings.build(__BUILD_ID__)}）`),
     );
 
     return h(

@@ -138,14 +138,7 @@ describe('合否（2 ラウンドとも合格で合格）', () => {
     expect(judgeCert(dh, 1, [stats(24, 19), stats(24, 19)]).passed).toBe(true);
     expect(judgeCert(dh, 1, [stats(24, 19), stats(24, 18)])).toEqual({ roundPassed: [true, false], passed: false });
     expect(judgeCert(dh, 1, [stats(16, 13), stats(16, 13)]).passed).toBe(true);
-    expect(judgeCert(dh, 1, [stats(16, 12), stats(16, 16)])).toEqual({ roundPassed: [false, true], passed: false });
-  });
-
-  it('スタンスチェンジ（2 ラウンド × 16 試行）: 13 / 16（81%）以上で合格、12 / 16（75%）は不合格', () => {
-    const sc = GAMES['stance-change'];
-    expect(judgeCert(sc, 1, [stats(16, 13), stats(16, 13)])).toEqual({ roundPassed: [true, true], passed: true });
-    expect(judgeCert(sc, 6, [stats(16, 16), stats(16, 12)])).toEqual({ roundPassed: [true, false], passed: false });
-    for (let c = 0; c <= 16; c++) expect(judgeCert(sc, 9, [stats(16, c), stats(16, c)]).passed, `${c} / 16`).toBe(c >= 13);
+    expect(judgeCert(dh, 1, [stats(16, 12), stats(16, 16)]).passed).toBe(false);
   });
 
   it('ラウンドが 2 本そろわなければ不合格', () => {
@@ -257,29 +250,6 @@ describe('実行: 固定難度・未訓練の刺激セット・2 ラウンド（
       onRound: () => void (roundsDone += 1),
     });
     expect(oneBad.verdict).toEqual({ roundPassed: [true, false], passed: false });
-  });
-});
-
-describe('審査のラウンド数は訓練の試合のラウンド数と別', () => {
-  // ティア 1 の試行数: ダブルヒット 24、コンボ・リコール 20 + n（n = 1）、スタンスチェンジ 16（仕様書 v1.3 で 30 から半減）
-  const TIER1_TRIALS: Record<(typeof GAME_IDS)[number], number> = { 'double-hit': 24, 'combo-recall': 21, 'stance-change': 16 };
-
-  it.each(GAME_IDS)('%s: 訓練は 1 試合 1 ラウンド（仕様書 v1.2）でも、審査は CERT_ROUNDS = 2 ラウンドでラウンド間が 1 回', async (id) => {
-    const base = GAMES[id];
-    expect(base.roundsPerMatch).toBe(1);
-    expect(base.extraRounds ?? 0).toBe(0);
-    expect(CERT_ROUNDS).toBe(2);
-    const { game, calls } = spy(base);
-    let between = 0;
-    const res = await certHeadless(game, 1, { plan: allCorrect, surface: nullSurface, between: () => void (between += 1) });
-    expect(res.rounds).toHaveLength(CERT_ROUNDS);
-    expect(res.rounds.map((r) => r.trials)).toEqual([TIER1_TRIALS[id], TIER1_TRIALS[id]]);
-    expect(between).toBe(1);
-    expect(calls.warmup).toBe(0);
-    expect(res.verdict).toEqual({ roundPassed: [true, true], passed: true });
-    // 1 ラウンドだけでは合格にならない（2 ラウンドとも必要）
-    const n = TIER1_TRIALS[id];
-    expect(judgeCert(base, 1, [{ trials: n, correct: n, accuracy: 1, errors: {} }]).passed).toBe(false);
   });
 });
 

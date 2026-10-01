@@ -5,7 +5,6 @@
  * - 1〜10: 2 ルール。D = 2000 ms から毎ステップ 10% 減、CSI = 1000 ms から毎ステップ 70 ms 減（1000 → 370）
  * - 11〜20: 3 ルール。D = 1600 ms から毎ステップ 10% 減（下限 700）、CSI = 600 ms から毎ステップ 33 ms 減（下限 300）
  * 適応（ラウンド末）: 正答率 ≥ 90% → +1、75〜89% → 維持、< 75% → −1。範囲 1〜20。初期ステップ 1。
- * 割合のルールなので試行数によらない（16 試行では 15/16 以上で +1、12〜14 で維持、11 以下で −1）。
  */
 import { blockPower } from '../../engine/power';
 import { blockThresholdStep, clamp, type BlockRuleConfig } from '../../engine/staircase';

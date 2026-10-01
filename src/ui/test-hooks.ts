@@ -39,6 +39,8 @@ export interface BfTestApi {
   /** 保存データ */
   save(): App['store']['data'];
   frameMs(): number;
+  /** 音の状態（AudioContext ができているか・流れている BGM・読み込み済みの効果音） */
+  audio(): { ready: boolean; music: string | null; sfx: string[] };
 }
 
 export interface FxAuditReport {
@@ -246,6 +248,7 @@ export function installTestHooks(app: App): void {
     },
     save: () => app.store.data,
     frameMs: () => app.frameMs,
+    audio: () => ({ ready: app.sound.ready, music: app.sound.currentMusic, sfx: app.sound.loadedSfx }),
   };
   (window as unknown as { __bfTest: BfTestApi }).__bfTest = api;
 }

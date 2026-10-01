@@ -40,7 +40,7 @@ export function defaultSaveData(now: Date = new Date()): SaveData {
   return {
     version: 1,
     createdAt: now.toISOString(),
-    settings: { fx: 'light', sound: true, colorSafe: false },
+    settings: { fx: 'light', sound: true, colorSafe: false, bgm: false },
     games,
     rounds: [],
     certs: [],
@@ -206,6 +206,7 @@ export function normalize(d: Json): SaveData {
       fx: (FX_PRESETS as readonly unknown[]).includes(s.fx) ? (s.fx as FxPreset) : base.settings.fx,
       sound: typeof s.sound === 'boolean' ? s.sound : base.settings.sound,
       colorSafe: typeof s.colorSafe === 'boolean' ? s.colorSafe : base.settings.colorSafe,
+      bgm: typeof s.bgm === 'boolean' ? s.bgm : base.settings.bgm,
     },
     games,
     rounds: list(d.rounds, normRound),

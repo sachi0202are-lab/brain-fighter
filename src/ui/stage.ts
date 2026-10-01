@@ -12,6 +12,7 @@ import type { RoundRequest } from '../engine/match';
 import { RoundAborted, RoundRunner, type StimulusSurface } from '../engine/round';
 import { createRafScheduler } from '../engine/timing';
 import type { AnyGameModule, Params, ResponseLayout, RoundOptions, RoundSummary } from '../engine/types';
+import { freezeArtForRound } from '../skin/art';
 import type { App } from './app';
 import { h } from './dom';
 
@@ -219,6 +220,8 @@ export class GameStage {
     this.runner = r;
     this.app.runners.set(r);
     (document.activeElement as HTMLElement | null)?.blur?.();
+    // 刺激領域で使う画像は、この時点で読み込み済みのものに固定する（ラウンドの途中で見た目が変わらない）
+    freezeArtForRound();
     try {
       return await r.start();
     } finally {

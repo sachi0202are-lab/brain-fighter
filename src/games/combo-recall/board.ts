@@ -7,6 +7,7 @@
  * - 点灯と消灯は明るさの差で区別し、点灯マスには形の印（打撃マーク）も付ける（色だけに頼らない）。
  * - 時刻 t に依存する描画はしない（刺激提示中に動くものを出さない。仕様書 13-8）。乱数も使わない。
  */
+import { artInRound, drawSprite, type SpriteKey } from '../../skin/art';
 import { POSITIONS } from './nback';
 
 export type TileShape = 'square' | 'disc' | 'diamond';
@@ -223,11 +224,19 @@ const POSES: Readonly<Record<EnemyPose, PoseShape>> = {
   },
 };
 
-/** 中央のマスに敵のシルエットを描く（静止画） */
+/** 構えごとの画像のシルエット（正面の敵 3 体。ラウンドの開始時に読み込み済みのときだけ使う） */
+const SPRITE_FOR_POSE: Readonly<Record<EnemyPose, SpriteKey>> = { guard: 'enemy-front-a', low: 'enemy-front-b', wide: 'enemy-front-c' };
+
+/**
+ * 中央のマスに敵のシルエットを描く（静止画）。
+ * 画像のシルエット（skin/art.ts）がラウンドの開始時に読み込み済みならマスの色に染めて描き、無ければ単純な図形で描く。
+ * どちらも盤の一部の静止画で、点灯の判定・時間には関わらない。
+ */
 function drawEnemy(ctx: CanvasRenderingContext2D, cell: Slot, pose: EnemyPose, color: string): void {
   const p = POSES[pose];
   const h = cell.r * 2 * 0.86;
   const footY = cell.y + h / 2;
+  if (drawSprite(ctx, SPRITE_FOR_POSE[pose], { x: cell.x, ground: footY, height: h, facing: 1, color }, artInRound)) return;
   const P = (pt: Pt, side: 1 | -1 = 1): [number, number] => [cell.x + pt[0] * h * side, footY + pt[1] * h];
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
