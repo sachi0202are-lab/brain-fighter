@@ -19,6 +19,18 @@ export const ART_SPRITES = {
   'enemy-front-a': { file: 'fighters/enemy-front-a.png', w: 310, h: 648 },
   'enemy-front-b': { file: 'fighters/enemy-front-b.png', w: 365, h: 668 },
   'enemy-front-c': { file: 'fighters/enemy-front-c.png', w: 298, h: 645 },
+  'dh-plain-high': { file: 'fighters/dh-plain-high.png', w: 239, h: 647 },
+  'dh-plain-mid': { file: 'fighters/dh-plain-mid.png', w: 236, h: 586 },
+  'dh-plain-low': { file: 'fighters/dh-plain-low.png', w: 238, h: 586 },
+  'dh-topknot-high': { file: 'fighters/dh-topknot-high.png', w: 240, h: 647 },
+  'dh-topknot-mid': { file: 'fighters/dh-topknot-mid.png', w: 240, h: 600 },
+  'dh-topknot-low': { file: 'fighters/dh-topknot-low.png', w: 240, h: 600 },
+  'dh-broad-high': { file: 'fighters/dh-broad-high.png', w: 237, h: 647 },
+  'dh-broad-mid': { file: 'fighters/dh-broad-mid.png', w: 238, h: 571 },
+  'dh-broad-low': { file: 'fighters/dh-broad-low.png', w: 236, h: 571 },
+  'dh-robe-high': { file: 'fighters/dh-robe-high.png', w: 231, h: 647 },
+  'dh-robe-mid': { file: 'fighters/dh-robe-mid.png', w: 234, h: 581 },
+  'dh-robe-low': { file: 'fighters/dh-robe-low.png', w: 236, h: 581 },
 } as const satisfies Record<string, ArtEntry>;
 
 export type SpriteKey = keyof typeof ART_SPRITES;
@@ -44,14 +56,4 @@ export const ART_UI = {
 
 /** ベルト（0 白帯 … 9 黒帯二段）。無ければ空（CSS の色見本で代用する） */
 export const ART_BELTS: readonly ArtEntry[] = [
-  { file: 'ui/belt-0.png', w: 80, h: 84 },
-  { file: 'ui/belt-1.png', w: 81, h: 84 },
-  { file: 'ui/belt-2.png', w: 81, h: 84 },
-  { file: 'ui/belt-3.png', w: 81, h: 84 },
-  { file: 'ui/belt-4.png', w: 81, h: 84 },
-  { file: 'ui/belt-5.png', w: 81, h: 84 },
-  { file: 'ui/belt-6.png', w: 81, h: 84 },
-  { file: 'ui/belt-7.png', w: 81, h: 84 },
-  { file: 'ui/belt-8.png', w: 81, h: 84 },
-  { file: 'ui/belt-9.png', w: 81, h: 84 },
 ];

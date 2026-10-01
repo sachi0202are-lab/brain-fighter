@@ -16,6 +16,7 @@
 | `player-sheet.jpg` | 自キャラ（構え・突き・勝ちポーズ）→ `fighters/player-*.png` | `-r 3:2 -s 2k` |
 | `enemy-side-sheet.jpg` | 敵（横向きの構え・ダウン）→ `fighters/enemy-guard.png` `enemy-down.png` | `-r 3:2 -s 2k` |
 | `enemy-front-sheet.jpg` | 敵の正面 3 体（標準・がっしり・細身）→ `fighters/enemy-front-{a,b,c}.png` | `-r 3:2 -s 2k` |
+| `dh-plain-sheet.jpg` `dh-topknot-sheet.jpg` `dh-broad-sheet.jpg` `dh-robe-sheet.jpg` | ダブルヒットの構え（正面 4 体 × 上段・中段・下段）→ `fighters/dh-{plain,topknot,broad,robe}-{high,mid,low}.png` | `-r 3:2 -s 2k` |
 | `stage-dojo.jpg` `stage-city.jpg` `stage-mountain.jpg` `stage-bridge.jpg` | ステージ背景 → `stages/*.jpg` | `-r 16:9 -s 2k` |
 | `logo-green.jpg` | ロゴ → `ui/logo.png` | `-r 2:1 -s 2k` |
 | `hero.jpg` | ホームのキービジュアル → `ui/hero.jpg` | `-r 2:1 -s 2k` |
@@ -24,6 +25,22 @@
 | `belts-green.jpg` | ベルト 10 本 → `ui/belt-{0..9}.png` | `-r 2:1 -s 2k` |
 
 ## プロンプト
+
+### dh-plain-sheet
+
+> Three solid black silhouettes of the same martial artist opponent, a standard athletic build with short hair, wearing a headband with two tails, seen from the FRONT (facing the viewer, body square to the camera, symmetrical), shadow puppet (kage-e) style, flat vector, crisp clean edges, no gradients, no outline strokes, no ground shadow, on a pure white background, arranged in a single horizontal row with generous empty white space between them and never touching, all exactly the same height and body proportions with feet on the same invisible baseline, feet shoulder-width apart. Only the arms differ: (1) left: HIGH guard, both arms raised straight up with both fists held high above the top of the head; (2) middle: MIDDLE guard, both elbows bent and tucked in, both fists held at shoulder height right beside the shoulders, close to the body; (3) right: LOW guard, both arms hanging down, both fists held at hip height right beside the hips. No text, no labels, no numbers, nothing else in the image
+
+### dh-topknot-sheet
+
+> Three solid black silhouettes of the same martial artist opponent, a standard athletic build with a samurai topknot (chonmage) hairstyle, seen from the FRONT (facing the viewer, body square to the camera, symmetrical), shadow puppet (kage-e) style, flat vector, crisp clean edges, no gradients, no outline strokes, no ground shadow, on a pure white background, arranged in a single horizontal row with generous empty white space between them and never touching, all exactly the same height and body proportions with feet on the same invisible baseline, feet shoulder-width apart. Only the arms differ: (1) left: HIGH guard, both arms raised straight up with both fists held high above the top of the head; (2) middle: MIDDLE guard, both elbows bent and tucked in, both fists held at shoulder height right beside the shoulders, close to the body; (3) right: LOW guard, both arms hanging down, both fists held at hip height right beside the hips. No text, no labels, no numbers, nothing else in the image
+
+### dh-broad-sheet
+
+> Three solid black silhouettes of the same martial artist opponent, a heavy, very broad-shouldered and muscular build, bald head, seen from the FRONT (facing the viewer, body square to the camera, symmetrical), shadow puppet (kage-e) style, flat vector, crisp clean edges, no gradients, no outline strokes, no ground shadow, on a pure white background, arranged in a single horizontal row with generous empty white space between them and never touching, all exactly the same height and body proportions with feet on the same invisible baseline, feet shoulder-width apart. Only the arms differ: (1) left: HIGH guard, both arms raised straight up with both fists held high above the top of the head; (2) middle: MIDDLE guard, both elbows bent and tucked in, both fists held at shoulder height right beside the shoulders, close to the body; (3) right: LOW guard, both arms hanging down, both fists held at hip height right beside the hips. No text, no labels, no numbers, nothing else in the image
+
+### dh-robe-sheet
+
+> Three solid black silhouettes of the same martial artist opponent, a slim build wearing a long loose martial-arts robe with wide sleeves and a hakama, hair tied back, seen from the FRONT (facing the viewer, body square to the camera, symmetrical), shadow puppet (kage-e) style, flat vector, crisp clean edges, no gradients, no outline strokes, no ground shadow, on a pure white background, arranged in a single horizontal row with generous empty white space between them and never touching, all exactly the same height and body proportions with feet on the same invisible baseline, feet shoulder-width apart. Only the arms differ: (1) left: HIGH guard, both arms raised straight up with both fists held high above the top of the head; (2) middle: MIDDLE guard, both elbows bent and tucked in, both fists held at shoulder height right beside the shoulders, close to the body; (3) right: LOW guard, both arms hanging down, both fists held at hip height right beside the hips. No text, no labels, no numbers, nothing else in the image
 
 ### player-sheet
 

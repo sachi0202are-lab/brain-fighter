@@ -5,11 +5,14 @@
  * 表層バリエーション（surface）で変わるのは、敵シルエットの形（髪・体格・道着）と背景色だけ。
  * 背景色は相対輝度をそろえてあり、刺激の大きさ・色・コントラスト・提示時間は変わらない。
  * 構えの区別（拳の高さ）は、どのバリエーションでも同じ形。
+ * 敵シルエットは、ラウンドの開始時に読み込み済みなら生成画像（fighters/dh-*-*.png。仕様書 v1.7）を
+ * 図形と同じ外接矩形・同じ色で描き、無ければ図形で描く（drawFigure）。火花・妨害・マスクは常に図形。
  *
  * 認定戦（view.untrained）では、火花と妨害の形・色を訓練と別のセットにする（輝度はそろえてある）。
  */
 import { mulberry32 } from '../../engine/rng';
 import type { PhaseName, RenderView, Response } from '../../engine/types';
+import { artInRound, drawSprite, type SpriteKey } from '../../skin/art';
 import { DIR_GROUP, DIRS, dirVector, type StanceId } from './layout';
 import { sparkPosition, type DhTrial, type Distractor } from './trials';
 
@@ -69,6 +72,17 @@ export const DISTRACTOR_R = 0.034;
 export const SOCKET_R = 0.085;
 /** シルエット全体の高さ（上段の拳の上端〜足元）。刺激領域の中心に置き、上下 ±0.22 に収まる */
 export const FIGURE_HEIGHT = 0.44;
+
+/**
+ * 構えの生成シルエット（表層の体 × 構え。仕様書 v1.7）。上段の拳の上端〜足元の高さが図形と同じ FIGURE_HEIGHT になるよう
+ * 加工してあり（scripts/art/process.mjs の ref = 上段）、中段・下段は同じ倍率なので頭の高さが同じで拳の高さだけ違う。
+ */
+export const STANCE_SPRITES: Readonly<Record<FigureVariant, Readonly<Record<StanceId, SpriteKey>>>> = {
+  plain: { high: 'dh-plain-high', mid: 'dh-plain-mid', low: 'dh-plain-low' },
+  topknot: { high: 'dh-topknot-high', mid: 'dh-topknot-mid', low: 'dh-topknot-low' },
+  broad: { high: 'dh-broad-high', mid: 'dh-broad-mid', low: 'dh-broad-low' },
+  robe: { high: 'dh-robe-high', mid: 'dh-robe-mid', low: 'dh-robe-low' },
+};
 
 const SOCKET_FILL = 'rgba(255, 255, 255, 0.06)';
 const SOCKET_STROKE = 'rgba(201, 207, 232, 0.55)';
@@ -147,7 +161,11 @@ const BODIES: Record<FigureVariant, Body> = {
   robe: { headR: 0.095, shoulderW: 0.155, waistW: 0.095, legW: 0.1, topknot: false, robe: true },
 };
 
-/** シルエットを描く（cx, cy = 刺激領域の中心、R = 刺激領域の半径） */
+/**
+ * シルエットを描く（cx, cy = 刺激領域の中心、R = 刺激領域の半径）。
+ * ラウンドの開始時に読み込み済みの生成シルエットがあれば、図形と同じ外接矩形（中心 ±0.22R）・同じ色で描く。
+ * 無ければ（読み込み前・読めない環境・Node のテスト）図形で描く。
+ */
 export function drawFigure(
   ctx: CanvasRenderingContext2D,
   cx: number,
@@ -156,6 +174,10 @@ export function drawFigure(
   stance: StanceId,
   variant: FigureVariant,
 ): void {
+  const box = FIGURE_HEIGHT * R;
+  if (drawSprite(ctx, STANCE_SPRITES[variant][stance], { x: cx, ground: cy + box / 2, height: box, facing: 1, color: FIGURE_COLOR }, artInRound)) {
+    return;
+  }
   const h = (FIGURE_HEIGHT * R) / (FIG_BOTTOM - FIG_TOP);
   const feetY = cy - ((FIG_TOP + FIG_BOTTOM) / 2) * h;
   const X = (p: Pt, side: number): number => cx + side * p.x * h;

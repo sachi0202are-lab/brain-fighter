@@ -2,6 +2,7 @@
  * ダブルヒットの試行列（系列の制約・妨害の配置）、判定の内訳、応答レイアウト・キー、刺激領域のタップ、描画。
  */
 import { describe, expect, it } from 'vitest';
+import { ART_SPRITES, SPRITE_STANDING_HEIGHT } from '../../skin/art';
 import { mulberry32 } from '../../engine/rng';
 import { maxRunLength } from '../../engine/sequence';
 import { layoutGroups, type RenderView, type RoundOptions } from '../../engine/types';
@@ -12,12 +13,14 @@ import { paramsAt, certDhParams } from './params';
 import {
   DISTRACTOR_R,
   FIGURE_COLOR,
+  FIGURE_HEIGHT,
   MASK_RES,
   SPARK_R,
   SURFACES,
   TRAINED_SET,
   UNTRAINED_SET,
   figureExtent,
+  STANCE_SPRITES,
   maskPixels,
   renderTrial,
 } from './render';
@@ -100,6 +103,23 @@ describe('妨害の配置', () => {
     }
     expect(problems).toEqual([]);
   }, 30_000);
+
+  it('構えの生成シルエット（4 体 × 3 構え）は図形と同じ外接矩形に収まる（高さ 0.44R・横 ±0.16R。仕様書 v1.7）', () => {
+    const scale = FIGURE_HEIGHT / SPRITE_STANDING_HEIGHT; // R = 1 のときの px → 比
+    for (const variant of SURFACES.map((s) => s.figure)) {
+      const keys = STANCE_SPRITES[variant];
+      for (const stance of ['high', 'mid', 'low'] as const) {
+        const e = ART_SPRITES[keys[stance]];
+        const height = e.h * scale;
+        const halfWidth = (e.w * scale) / 2;
+        expect(height, keys[stance]).toBeLessThanOrEqual(0.45);
+        expect(halfWidth, keys[stance]).toBeLessThan(0.16);
+        // 上段は拳の上端〜足元が外接矩形いっぱい（高さの基準）。中段・下段は頭が上端なので低い
+        if (stance === 'high') expect(height, keys[stance]).toBeGreaterThan(0.43);
+        else expect(height, keys[stance]).toBeLessThan(ART_SPRITES[keys.high].h * scale);
+      }
+    }
+  });
 
   it('置き場所どうし・火花・中央のシルエットと重ならず、刺激領域の内側に収まる', () => {
     const fig = figureExtent();

@@ -37,6 +37,11 @@ const SHEETS = [
   { src: 'player-sheet', sprites: ['player-guard', 'player-strike', 'player-victory'], ref: 0 },
   { src: 'enemy-side-sheet', sprites: ['enemy-guard', 'enemy-down'], ref: 0 },
   { src: 'enemy-front-sheet', sprites: ['enemy-front-a', 'enemy-front-b', 'enemy-front-c'], ref: 0 },
+  // ダブルヒットの構え（正面向き。左から 上段・中段・下段。高さの基準は上段 = 拳の上端〜足元）
+  { src: 'dh-plain-sheet', sprites: ['dh-plain-high', 'dh-plain-mid', 'dh-plain-low'], ref: 0 },
+  { src: 'dh-topknot-sheet', sprites: ['dh-topknot-high', 'dh-topknot-mid', 'dh-topknot-low'], ref: 0 },
+  { src: 'dh-broad-sheet', sprites: ['dh-broad-high', 'dh-broad-mid', 'dh-broad-low'], ref: 0 },
+  { src: 'dh-robe-sheet', sprites: ['dh-robe-high', 'dh-robe-mid', 'dh-robe-low'], ref: 0 },
 ];
 const STAGES = ['dojo', 'city', 'mountain', 'bridge'];
 const THUMBS = ['double-hit', 'combo-recall', 'stance-change'];

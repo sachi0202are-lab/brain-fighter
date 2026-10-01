@@ -30,6 +30,19 @@ const NATURAL_FACING: Readonly<Record<SpriteKey, 1 | -1 | 0>> = {
   'enemy-front-a': 0,
   'enemy-front-b': 0,
   'enemy-front-c': 0,
+  // ダブルヒットの構え（正面）
+  'dh-plain-high': 0,
+  'dh-plain-mid': 0,
+  'dh-plain-low': 0,
+  'dh-topknot-high': 0,
+  'dh-topknot-mid': 0,
+  'dh-topknot-low': 0,
+  'dh-broad-high': 0,
+  'dh-broad-mid': 0,
+  'dh-broad-low': 0,
+  'dh-robe-high': 0,
+  'dh-robe-mid': 0,
+  'dh-robe-low': 0,
 };
 
 export function artUrl(file: string): string {
